@@ -45,8 +45,12 @@ export async function POST(req: Request) {
         { status: auth.status },
       );
     }
-    // 1. Fetch category cultivation insights
-    const targetUrl = "https://en.minghui.org/cc/26/";
+    // 1. Fetch the parent "Cultivation" category (/cc/24/), which aggregates all
+    // sub-categories (Cultivation Insights /cc/26/, Improving Oneself /cc/63/,
+    // Journeys of Cultivation /cc/64/, ...). Scraping the parent captures every
+    // cultivation article; scraping a single sub-category (e.g. /cc/26/) misses
+    // the rest.
+    const targetUrl = "https://en.minghui.org/cc/24/";
     const response = await fetch(targetUrl, {
       headers: {
         "User-Agent":
