@@ -41,6 +41,7 @@ export default function Dashboard() {
   }
 
   const [copied, setCopied] = useState(false);
+  const [isInitialMountChecked, setIsInitialMountChecked] = useState(false);
 
   function handleCopyShareLink() {
     if (!readingArticlePath) return;
@@ -61,6 +62,8 @@ export default function Dashboard() {
 
   // Synchronize readingArticlePath with URL query parameter
   useEffect(() => {
+    if (!isInitialMountChecked) return;
+    
     const params = new URLSearchParams(window.location.search);
     const currentParam = params.get('article');
     
@@ -77,7 +80,7 @@ export default function Dashboard() {
         window.history.pushState({ path: newUrl }, '', newUrl);
       }
     }
-  }, [readingArticlePath]);
+  }, [readingArticlePath, isInitialMountChecked]);
 
   // Check query params on mount and handle popstate (browser back/forward button)
   useEffect(() => {
@@ -86,6 +89,7 @@ export default function Dashboard() {
     if (articleParam) {
       setReadingArticlePath(articleParam);
     }
+    setIsInitialMountChecked(true);
 
     function handlePopState() {
       const p = new URLSearchParams(window.location.search);
