@@ -42,7 +42,10 @@ export function initDrive() {
 /**
  * Helper to construct list parameters, adding driveId and corpora if GOOGLE_DRIVE_ID is set.
  */
-function getListParams(query: string, fields: string): drive_v3.Params$Resource$Files$List {
+function getListParams(
+  query: string,
+  fields: string,
+): drive_v3.Params$Resource$Files$List {
   const params: drive_v3.Params$Resource$Files$List = {
     q: query,
     fields: fields,
@@ -59,7 +62,10 @@ function getListParams(query: string, fields: string): drive_v3.Params$Resource$
   return params;
 }
 
-async function resolvePathToId(drive: drive_v3.Drive, path: string): Promise<string> {
+async function resolvePathToId(
+  drive: drive_v3.Drive,
+  path: string,
+): Promise<string> {
   const parts = path.split("/").filter((p) => p.length > 0);
   let currentParentId = "root";
 
