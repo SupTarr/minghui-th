@@ -5,6 +5,7 @@
   --foreground: #f8fafc;
   
   --font-display: var(--font-serif-th), var(--font-serif-en), serif;
+  --font-sans: var(--font-sans-th), var(--font-sans-en), sans-serif;
 }
 
 @theme {

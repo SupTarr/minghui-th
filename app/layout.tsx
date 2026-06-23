@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
-import { Inter, Geist_Mono, Noto_Serif_Thai, Playfair_Display } from "next/font/google";
+import { Inter, Geist_Mono, Noto_Serif_Thai, Playfair_Display, Sarabun } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
-  variable: "--font-sans",
+  variable: "--font-sans-en",
   subsets: ["latin"],
+});
+
+const sarabun = Sarabun({
+  variable: "--font-sans-th",
+  subsets: ["thai"],
+  weight: ["300", "400", "500", "600", "700"],
 });
 
 const geistMono = Geist_Mono({
@@ -38,7 +44,7 @@ export default function RootLayout({
   return (
     <html
       lang="th"
-      className={`${inter.variable} ${geistMono.variable} ${notoSerifThai.variable} ${playfairDisplay.variable} h-full antialiased`}
+      className={`${inter.variable} ${sarabun.variable} ${geistMono.variable} ${notoSerifThai.variable} ${playfairDisplay.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-[#060913] text-[#f8fafc]">{children}</body>
     </html>
