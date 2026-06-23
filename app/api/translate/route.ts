@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { isAuthorized } from "@/lib/auth";
+import { authorize } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
-    if (!(await isAuthorized(req))) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await authorize(req);
+    if (!auth.authorized) {
+      return NextResponse.json(
+        { error: "Unauthorized", reason: auth.reason },
+        { status: auth.status },
+      );
     }
 
     const { url } = await req.json();
