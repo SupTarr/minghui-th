@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "cheerio": "^1.2.0",
+    "googleapis": "^173.0.0",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4"
