@@ -1078,7 +1078,7 @@ export default function Dashboard() {
                     <h3 className="text-sm font-display font-bold text-slate-100 leading-relaxed group-hover:text-teal-400 transition-colors line-clamp-2">
                       {article.title_th}
                     </h3>
-                    <p className="text-[10px] text-slate-500 font-sans line-clamp-1 mt-1.5 italic group-hover:text-slate-400 transition-colors">
+                    <p className="text-3xs text-slate-500 font-sans line-clamp-1 mt-1.5 italic group-hover:text-slate-400 transition-colors">
                       {article.title_en}
                     </p>
                   </div>
@@ -1090,10 +1090,10 @@ export default function Dashboard() {
           {/* MIDDLE COLUMN: WORKSPACE CONSOLE */}
           <section className="lg:col-span-3 space-y-6">
             <div>
-              <h2 className="text-3xs font-bold uppercase tracking-widest text-teal-400 font-mono">
+              <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">
                 แผงคอนโซลควบคุม
               </h2>
-              <p className="text-[9px] text-slate-550 font-sans mt-0.5">
+              <p className="text-3xs text-slate-550 font-sans mt-0.5">
                 Workspace Operations & Execution Logs
               </p>
             </div>
@@ -1101,24 +1101,24 @@ export default function Dashboard() {
             {/* Statistics Row */}
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 rounded-xl bg-[#0c1220]/20 border border-slate-900 backdrop-blur-xs">
-                <span className="text-[9px] uppercase tracking-wider text-slate-500 font-mono">
+                <span className="text-4xs uppercase tracking-wider text-slate-500 font-mono">
                   คลังบทความ
                 </span>
                 <p className="text-lg font-mono font-bold text-teal-400 mt-0.5">
                   {archivedArticles.length}
                 </p>
-                <span className="text-[8px] text-slate-550 font-sans mt-0.5 block leading-none">
+                <span className="text-4xs text-slate-550 font-sans mt-0.5 block leading-none">
                   ใน Drive Index
                 </span>
               </div>
               <div className="p-3 rounded-xl bg-[#0c1220]/20 border border-slate-900 backdrop-blur-xs">
-                <span className="text-[9px] uppercase tracking-wider text-slate-500 font-mono">
+                <span className="text-4xs uppercase tracking-wider text-slate-500 font-mono">
                   แปลสำเร็จ
                 </span>
                 <p className="text-lg font-mono font-bold text-[#fda4af] mt-0.5">
                   {newlySynced.length}
                 </p>
-                <span className="text-[8px] text-slate-550 font-sans mt-0.5 block leading-none">
+                <span className="text-4xs text-slate-550 font-sans mt-0.5 block leading-none">
                   ในเซสชันนี้
                 </span>
               </div>
@@ -1133,13 +1133,13 @@ export default function Dashboard() {
                   <span className="w-2 rounded-full h-2 bg-amber-500/40 border border-amber-500/20" />
                   <span className="w-2 rounded-full h-2 bg-emerald-500/40 border border-emerald-500/20" />
                 </div>
-                <span className="text-[9px] text-slate-550 font-mono tracking-wide uppercase">
+                <span className="text-4xs text-slate-550 font-mono tracking-wide uppercase">
                   live_operation.sh
                 </span>
                 <span className="w-8" />
               </div>
 
-              <div className="p-3 flex-1 overflow-y-auto font-mono text-[9px] space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 bg-[#060913]">
+              <div className="p-3 flex-1 overflow-y-auto font-mono text-4xs space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 bg-[#060913]">
                 {logs.length === 0 ? (
                   <div className="text-slate-655 italic font-sans text-3xs">
                     รอเริ่มการซิงค์ข้อมูล... กรุณากดปุ่ม
@@ -1158,7 +1158,7 @@ export default function Dashboard() {
               {/* Progress Bar */}
               {isSyncing && (
                 <div className="bg-[#0c1220]/60 border-t border-slate-900 px-4 py-2.5 backdrop-blur-xs">
-                  <div className="flex justify-between items-center text-[9px] mb-1.5">
+                  <div className="flex justify-between items-center text-4xs mb-1.5">
                     <span className="truncate max-w-[80%] text-slate-455 font-sans tracking-wide">
                       {statusMessage}
                     </span>
@@ -1197,7 +1197,7 @@ export default function Dashboard() {
               {/* System State Info Description */}
               <div className="text-center w-full px-2 mb-6">
                 {!isSyncing ? (
-                  <p className="text-3xs text-slate-455 leading-relaxed font-sans">
+                  <p className="text-2xs text-slate-455 leading-relaxed font-sans">
                     ระบบพร้อมสำหรับการเริ่มดึงข้อมูล (Scraping) แปลความด้วย AI
                     (Gemini Translator) และนำเข้าบัญชีจัดเก็บ Google Drive
                     ของระบบแบบเรียลไทม์
@@ -1406,7 +1406,7 @@ export default function Dashboard() {
                 {/* Authentication sync action buttons */}
                 {!googleIdToken ? (
                   <div className="flex flex-col items-center justify-center p-4 bg-[#060913] border border-slate-900 rounded-2xl space-y-2.5 shadow-inner">
-                    <span className="text-3xs text-slate-500 font-medium text-center leading-normal font-sans">
+                    <span className="text-2xs text-slate-500 font-medium text-center leading-normal font-sans">
                       จำเป็นต้องลงชื่อเข้าบัญชีของเจ้าของสิทธิ์ระบบเพื่อซิงค์ข้อมูล
                     </span>
                     <div
@@ -1647,7 +1647,7 @@ export default function Dashboard() {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   />
                 </svg>
-                <p className="text-[10px] uppercase tracking-wider text-slate-450 font-mono">
+                <p className="text-3xs uppercase tracking-wider text-slate-450 font-mono">
                   กำลังโหลดเนื้อหาจาก Drive...
                 </p>
               </div>
@@ -1655,7 +1655,7 @@ export default function Dashboard() {
               <article className="space-y-8 relative z-10">
                 {/* Metadata Header */}
                 <div className="border-b border-slate-900/60 pb-6 space-y-4 font-sans">
-                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono font-semibold">
+                  <div className="flex flex-wrap items-center gap-2 text-3xs font-mono font-semibold">
                     <span className="bg-amber-500/10 text-amber-400 px-2.5 py-0.5 rounded-md border border-amber-500/15">
                       {articleContent.published_date}
                     </span>

@@ -12,9 +12,20 @@
   --font-sans: var(--font-sans), sans-serif;
   --font-mono: var(--font-mono), monospace;
   --font-display: var(--font-display);
-  
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  /* Sub-xs type scale — a deliberate, even step down for captions, labels
+     and data, so the small text across the UI reads as one consistent system
+     instead of a mix of dropped tokens and one-off pixel values.
+     Steps: 9 / 10 / 11 px, sitting just below the default text-xs (12px). */
+  --text-4xs: 0.5625rem;
+  --text-4xs--line-height: 0.875rem;
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: 0.9375rem;
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
 }
 
 body {

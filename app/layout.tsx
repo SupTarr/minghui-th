@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import {
   Inter,
   Geist_Mono,
-  Noto_Serif_Thai,
+  Trirong,
   Playfair_Display,
   Sarabun,
 } from "next/font/google";
@@ -24,10 +24,10 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const notoSerifThai = Noto_Serif_Thai({
+const trirong = Trirong({
   variable: "--font-serif-th",
   subsets: ["thai"],
-  weight: ["400", "700"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const playfairDisplay = Playfair_Display({
@@ -50,7 +50,7 @@ export default function RootLayout({
   return (
     <html
       lang="th"
-      className={`${inter.variable} ${sarabun.variable} ${geistMono.variable} ${notoSerifThai.variable} ${playfairDisplay.variable} h-full antialiased`}
+      className={`${inter.variable} ${sarabun.variable} ${geistMono.variable} ${trirong.variable} ${playfairDisplay.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-[#060913] text-[#f8fafc]">
         {children}
