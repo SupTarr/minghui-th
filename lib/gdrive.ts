@@ -331,6 +331,7 @@ export interface CatalogEntry {
   title_en: string;
   title_th: string;
   date: string;
+  category?: string;
   filePath: string;
 }
 

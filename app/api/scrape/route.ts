@@ -68,7 +68,12 @@ export async function POST(req: Request) {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    const articles: Array<{ url: string; title_en: string; date: string }> = [];
+    const articles: Array<{
+      url: string;
+      title_en: string;
+      date: string;
+      category: string;
+    }> = [];
 
     // Select recent articles list elements
     $(".main-category-articles-list li a").each((_, el) => {
@@ -84,15 +89,21 @@ export async function POST(req: Request) {
       const titleDiv = a.find("div").not(".category-article-date");
       const title_en = titleDiv.text().trim();
 
-      // Date parsing
+      // The .category-article-date div holds "June 23, 2026 | Journeys of
+      // Cultivation": left of the pipe is the date, right is the sub-category.
+      const metaText = a.find(".category-article-date").text().trim();
+      const pipeIdx = metaText.indexOf("|");
+      const dateText = pipeIdx === -1 ? metaText : metaText.slice(0, pipeIdx);
+      const category = pipeIdx === -1 ? "" : metaText.slice(pipeIdx + 1).trim();
+
+      // Prefer the date embedded in the URL; fall back to the listed date text.
       let date = parseDateFromUrl(href);
       if (!date) {
-        const dateText = a.find(".category-article-date").text().trim();
-        date = parseDateText(dateText);
+        date = parseDateText(dateText.trim());
       }
 
       if (title_en && url) {
-        articles.push({ url, title_en, date });
+        articles.push({ url, title_en, date, category });
       }
     });
 

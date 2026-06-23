@@ -13,7 +13,10 @@ export async function POST(req: Request) {
     }
 
     const article = await req.json();
-    const { url, title_en, title_th, content_en, content_th, date } = article;
+    const { url, title_en, title_th, content_en, content_th, date, category } =
+      article;
+    // Fall back to the parent category when the list row had no sub-category.
+    const articleCategory = category || "Cultivation";
 
     if (!url || !title_en || !title_th || !content_en || !content_th || !date) {
       return NextResponse.json(
@@ -42,7 +45,7 @@ export async function POST(req: Request) {
       title_th,
       content_en,
       content_th,
-      category: "Cultivation Insights",
+      category: articleCategory,
       published_date: date,
       fetched_at: new Date().toISOString(),
     };
@@ -58,6 +61,7 @@ export async function POST(req: Request) {
       title_en,
       title_th,
       date,
+      category: articleCategory,
       filePath: `/${folderName}/${fileName}`,
     };
 

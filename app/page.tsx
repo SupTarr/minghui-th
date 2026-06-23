@@ -475,6 +475,7 @@ export default function Dashboard() {
             content_en: transData.content_en,
             content_th: transData.content_th,
             date: article.date,
+            category: article.category,
           }),
           signal: controller.signal,
         });
@@ -500,6 +501,7 @@ export default function Dashboard() {
           title_en: article.title_en,
           title_th: transData.title_th,
           date: article.date,
+          category: saveData.entry?.category ?? article.category,
           filePath: saveData.filePath,
         };
 
