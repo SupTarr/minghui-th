@@ -41,7 +41,13 @@ interface WindowWithGoogle extends Window {
   };
 }
 
-function LotusFlower({ active, progress }: { active: boolean; progress: number }) {
+function LotusFlower({
+  active,
+  progress,
+}: {
+  active: boolean;
+  progress: number;
+}) {
   return (
     <div className="relative w-32 h-32 flex items-center justify-center mx-auto mb-4 animate-float">
       {/* Glow behind the lotus */}
@@ -89,7 +95,9 @@ function LotusFlower({ active, progress }: { active: boolean; progress: number }
       {/* Lotus Petals SVG */}
       <svg
         className={`w-16 h-16 transition-all duration-1000 ${
-          active ? "text-teal-400 scale-105" : "text-slate-500 hover:text-teal-300"
+          active
+            ? "text-teal-400 scale-105"
+            : "text-slate-500 hover:text-teal-300"
         }`}
         viewBox="0 0 100 100"
         fill="none"
@@ -146,19 +154,42 @@ function formatLogLine(log: string) {
   }
 
   let colorClass = "text-slate-300";
-  if (message.includes("❌") || message.includes("🛑") || message.toLowerCase().includes("fail") || message.includes("ล้มเหลว") || message.includes("ข้อผิดพลาด")) {
+  if (
+    message.includes("❌") ||
+    message.includes("🛑") ||
+    message.toLowerCase().includes("fail") ||
+    message.includes("ล้มเหลว") ||
+    message.includes("ข้อผิดพลาด")
+  ) {
     colorClass = "text-rose-400";
-  } else if (message.includes("⚠️") || message.toLowerCase().includes("warn") || message.includes("ยกเลิก")) {
+  } else if (
+    message.includes("⚠️") ||
+    message.toLowerCase().includes("warn") ||
+    message.includes("ยกเลิก")
+  ) {
     colorClass = "text-amber-400";
-  } else if (message.includes("✅") || message.includes("🎉") || message.includes("เสร็จสิ้น") || message.includes("สำเร็จ")) {
+  } else if (
+    message.includes("✅") ||
+    message.includes("🎉") ||
+    message.includes("เสร็จสิ้น") ||
+    message.includes("สำเร็จ")
+  ) {
     colorClass = "text-teal-400 font-medium";
-  } else if (message.includes("ℹ️") || message.includes("กำลังเริ่มต้น") || message.includes("กำลัง")) {
+  } else if (
+    message.includes("ℹ️") ||
+    message.includes("กำลังเริ่มต้น") ||
+    message.includes("กำลัง")
+  ) {
     colorClass = "text-teal-500/90";
   }
 
   return (
     <div className="flex gap-2">
-      {timestamp && <span className="text-slate-500 shrink-0 select-none font-mono">{timestamp}</span>}
+      {timestamp && (
+        <span className="text-slate-500 shrink-0 select-none font-mono">
+          {timestamp}
+        </span>
+      )}
       <span className={colorClass}>{message}</span>
     </div>
   );
@@ -307,25 +338,28 @@ export default function Dashboard() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const loadArticleContent = useCallback(async (path: string) => {
-    try {
-      setIsLoadingArticle(true);
-      const res = await fetch(
-        `/api/article?filePath=${encodeURIComponent(path)}`,
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setArticleContent(data);
-      } else {
-        addLog(`❌ โหลดบทความล้มเหลว: ${path}`);
+  const loadArticleContent = useCallback(
+    async (path: string) => {
+      try {
+        setIsLoadingArticle(true);
+        const res = await fetch(
+          `/api/article?filePath=${encodeURIComponent(path)}`,
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setArticleContent(data);
+        } else {
+          addLog(`❌ โหลดบทความล้มเหลว: ${path}`);
+        }
+      } catch (e) {
+        console.error(e);
+        addLog(`❌ เกิดข้อผิดพลาดในการโหลดบทความ: ${path}`);
+      } finally {
+        setIsLoadingArticle(false);
       }
-    } catch (e) {
-      console.error(e);
-      addLog(`❌ เกิดข้อผิดพลาดในการโหลดบทความ: ${path}`);
-    } finally {
-      setIsLoadingArticle(false);
-    }
-  }, [addLog]);
+    },
+    [addLog],
+  );
 
   // Fetch article content on path update
   useEffect(() => {
@@ -545,8 +579,8 @@ export default function Dashboard() {
           <ul key={idx} className="list-disc pl-8 mb-3 space-y-1">
             <li
               className={`text-sm sm:text-base ${
-                lang === "en" 
-                  ? "text-slate-350 font-sans leading-relaxed" 
+                lang === "en"
+                  ? "text-slate-350 font-sans leading-relaxed"
                   : "text-slate-200 font-sans leading-loose"
               }`}
             >
@@ -574,8 +608,8 @@ export default function Dashboard() {
         <p
           key={idx}
           className={`indent-8 mb-5 text-sm sm:text-base ${
-            lang === "en" 
-              ? "text-slate-350 font-sans leading-relaxed" 
+            lang === "en"
+              ? "text-slate-350 font-sans leading-relaxed"
               : "text-slate-100 font-sans leading-loose"
           }`}
         >
@@ -808,9 +842,7 @@ export default function Dashboard() {
           err.message?.includes("401") ||
           err.message?.includes("403")
         ) {
-          addLog(
-            "❌ อีเมลนี้ไม่ได้รับสิทธิ์เข้าใช้งานระบบ หรือเซสชันหมดอายุ",
-          );
+          addLog("❌ อีเมลนี้ไม่ได้รับสิทธิ์เข้าใช้งานระบบ หรือเซสชันหมดอายุ");
           setStatusMessage("ไม่มีสิทธิ์เข้าใช้งานระบบ");
         } else {
           setStatusMessage("เกิดข้อผิดพลาดในการแปล/บันทึก");
@@ -836,27 +868,45 @@ export default function Dashboard() {
           <div className="flex items-center gap-3.5">
             <div className="w-10 h-10 rounded-2xl bg-[#0c1220] border border-slate-900 flex items-center justify-center shadow-md relative group overflow-hidden">
               <div className="absolute inset-0 bg-teal-500/5 group-hover:bg-teal-500/10 transition-colors duration-500" />
-              <svg className="w-6 h-6 text-teal-400/90 relative z-10 transition-transform duration-700 group-hover:rotate-180" viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M50 82 C25 72, 20 45, 50 25 C80 45, 75 72, 50 82 Z" fill="currentColor" fillOpacity="0.1" />
-                <path d="M50 82 C35 77, 35 55, 50 45 C65 55, 65 77, 50 82 Z" fill="currentColor" fillOpacity="0.2" />
+              <svg
+                className="w-6 h-6 text-teal-400/90 relative z-10 transition-transform duration-700 group-hover:rotate-180"
+                viewBox="0 0 100 100"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <path
+                  d="M50 82 C25 72, 20 45, 50 25 C80 45, 75 72, 50 82 Z"
+                  fill="currentColor"
+                  fillOpacity="0.1"
+                />
+                <path
+                  d="M50 82 C35 77, 35 55, 50 45 C65 55, 65 77, 50 82 Z"
+                  fill="currentColor"
+                  fillOpacity="0.2"
+                />
               </svg>
             </div>
             <div>
               <h1 className="text-lg sm:text-xl font-display font-bold tracking-wide text-slate-100 flex items-center gap-2">
                 <span>MINGHUI INSIGHTS</span>
-                <span className="text-2xs font-mono px-2 py-0.5 rounded-md bg-teal-500/10 text-teal-400 border border-teal-500/15 uppercase font-medium tracking-widest">TH</span>
+                <span className="text-2xs font-mono px-2 py-0.5 rounded-md bg-teal-500/10 text-teal-400 border border-teal-500/15 uppercase font-medium tracking-widest">
+                  TH
+                </span>
               </h1>
               <p className="text-3xs sm:text-2xs text-slate-455 font-sans tracking-wide">
                 ระบบสืบค้นข้อมูลและแปลถอดความบทความสัจธรรมธรรมปฏิบัติฝึกสมาธิ
               </p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-3">
             {googleIdToken && (
               <div className="hidden sm:flex items-center gap-2 bg-[#0c1220]/60 border border-slate-900 px-3.5 py-1.5 rounded-xl text-3xs font-mono">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-opacity" />
-                <span className="text-slate-350 max-w-[140px] truncate">{userEmail}</span>
+                <span className="text-slate-350 max-w-[140px] truncate">
+                  {userEmail}
+                </span>
               </div>
             )}
             <span className="inline-flex items-center rounded-xl bg-slate-900/80 px-3 py-1.5 text-3xs font-mono font-medium text-slate-455 border border-slate-850">
@@ -867,7 +917,6 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 relative z-10">
-        
         {/* Sync Summary Notification */}
         {newCount !== null && (
           <div
@@ -879,11 +928,19 @@ export default function Dashboard() {
           >
             <div className="flex items-center gap-2.5">
               <span className="flex h-2 w-2 relative">
-                {newCount > 0 && <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-teal-400" />}
-                <span className={`relative inline-flex rounded-full h-2 w-2 ${newCount > 0 ? "bg-teal-500" : "bg-slate-650"}`} />
+                {newCount > 0 && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-teal-400" />
+                )}
+                <span
+                  className={`relative inline-flex rounded-full h-2 w-2 ${newCount > 0 ? "bg-teal-500" : "bg-slate-650"}`}
+                />
               </span>
               <p className="text-xs font-semibold font-sans">
-                พบบทความใหม่สำหรับวันนี้ใน Minghui.org: <span className="font-mono font-bold underline bg-teal-500/10 px-1.5 py-0.5 rounded text-teal-400 ml-1">{newCount}</span> รายการ
+                พบบทความใหม่สำหรับวันนี้ใน Minghui.org:{" "}
+                <span className="font-mono font-bold underline bg-teal-500/10 px-1.5 py-0.5 rounded text-teal-400 ml-1">
+                  {newCount}
+                </span>{" "}
+                รายการ
               </p>
             </div>
             {newCount > 0 && isSyncing && (
@@ -895,13 +952,16 @@ export default function Dashboard() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
           {/* LEFT COLUMN: ARCHIVE LEDGER */}
-          <section className="lg:col-span-5 flex flex-col space-y-4 lg:sticky lg:top-24 h-auto lg:h-[calc(100vh-140px)] min-h-[500px]">
+          <section className="lg:col-span-6 flex flex-col space-y-4 lg:sticky lg:top-24 h-auto lg:h-[calc(100vh-140px)] min-h-[500px]">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">คลังบทความ</h2>
-                <p className="text-3xs text-slate-500 font-sans mt-0.5">Archive Library & Index Ledger</p>
+                <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">
+                  คลังบทความ
+                </h2>
+                <p className="text-3xs text-slate-500 font-sans mt-0.5">
+                  Archive Library & Index Ledger
+                </p>
               </div>
               {selectedDate && (
                 <span className="text-3xs font-mono bg-teal-500/10 text-teal-400 border border-teal-500/15 px-2.5 py-1 rounded-lg flex items-center gap-1.5 animate-fade-in">
@@ -939,23 +999,49 @@ export default function Dashboard() {
             <div className="flex-1 overflow-y-auto scrollbar-thin pr-1 space-y-3 pb-6">
               {loadingInitial && activeTab === "archived" ? (
                 <div className="h-[250px] flex flex-col items-center justify-center text-slate-550 space-y-3">
-                  <svg className="animate-spin h-6 w-6 text-teal-500/70" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  <svg
+                    className="animate-spin h-6 w-6 text-teal-500/70"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
                   </svg>
-                  <span className="text-3xs uppercase tracking-wider text-slate-555 font-mono">กำลังเชื่อมต่อข้อมูลคลัง...</span>
+                  <span className="text-3xs uppercase tracking-wider text-slate-555 font-mono">
+                    กำลังเชื่อมต่อข้อมูลคลัง...
+                  </span>
                 </div>
               ) : activeTab === "archived" && archivedArticles.length === 0 ? (
                 <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
-                  <span className="text-xs font-sans">ไม่พบบทความใดๆ ในระบบคลังข้อมูล</span>
+                  <span className="text-xs font-sans">
+                    ไม่พบบทความใดๆ ในระบบคลังข้อมูล
+                  </span>
                 </div>
-              ) : activeTab === "archived" && selectedDate && archivedArticles.filter((a) => a.date === selectedDate).length === 0 ? (
+              ) : activeTab === "archived" &&
+                selectedDate &&
+                archivedArticles.filter((a) => a.date === selectedDate)
+                  .length === 0 ? (
                 <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
-                  <span className="text-xs font-sans">ไม่พบบทความสำหรับวันที่ระบุ</span>
+                  <span className="text-xs font-sans">
+                    ไม่พบบทความสำหรับวันที่ระบุ
+                  </span>
                 </div>
               ) : activeTab === "newly-synced" && newlySynced.length === 0 ? (
                 <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
-                  <span className="text-xs font-sans">ยังไม่มีบทความที่ดึงใหม่ในเซสชันนี้</span>
+                  <span className="text-xs font-sans">
+                    ยังไม่มีบทความที่ดึงใหม่ในเซสชันนี้
+                  </span>
                 </div>
               ) : (
                 (activeTab === "archived"
@@ -966,21 +1052,33 @@ export default function Dashboard() {
                 ).map((article: Article, idx: number) => (
                   <div
                     key={idx}
-                    onClick={() => article.filePath && openArticle(article.filePath)}
+                    onClick={() =>
+                      article.filePath && openArticle(article.filePath)
+                    }
                     className="p-4 rounded-xl bg-[#0c1220]/30 border border-slate-900 hover:border-teal-500/30 hover:bg-[#0c1220]/60 transition-all duration-300 group cursor-pointer shadow-xs active:scale-[0.99] animate-fade-in"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-3xs font-mono bg-slate-900/80 px-2 py-0.5 rounded text-slate-450 border border-slate-850">
                         {article.date}
                       </span>
-                      <svg className="w-3.5 h-3.5 text-slate-600 group-hover:text-teal-400 transition-colors" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                      <svg
+                        className="w-3.5 h-3.5 text-slate-600 group-hover:text-teal-400 transition-colors"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+                        />
                       </svg>
                     </div>
-                    <h3 className="text-xs font-display font-semibold text-slate-200 leading-relaxed group-hover:text-slate-100 transition-colors line-clamp-2">
+                    <h3 className="text-sm font-display font-bold text-slate-100 leading-relaxed group-hover:text-teal-400 transition-colors line-clamp-2">
                       {article.title_th}
                     </h3>
-                    <p className="text-3xs text-slate-500 font-sans line-clamp-1 mt-1.5 italic group-hover:text-slate-450 transition-colors">
+                    <p className="text-[10px] text-slate-500 font-sans line-clamp-1 mt-1.5 italic group-hover:text-slate-400 transition-colors">
                       {article.title_en}
                     </p>
                   </div>
@@ -990,43 +1088,62 @@ export default function Dashboard() {
           </section>
 
           {/* MIDDLE COLUMN: WORKSPACE CONSOLE */}
-          <section className="lg:col-span-4 space-y-6">
+          <section className="lg:col-span-3 space-y-6">
             <div>
-              <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">แผงคอนโซลควบคุม</h2>
-              <p className="text-3xs text-slate-500 font-sans mt-0.5">Workspace Operations & Execution Logs</p>
+              <h2 className="text-3xs font-bold uppercase tracking-widest text-teal-400 font-mono">
+                แผงคอนโซลควบคุม
+              </h2>
+              <p className="text-[9px] text-slate-550 font-sans mt-0.5">
+                Workspace Operations & Execution Logs
+              </p>
             </div>
 
             {/* Statistics Row */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 rounded-2xl bg-[#0c1220]/20 border border-slate-900 backdrop-blur-xs">
-                <span className="text-3xs uppercase tracking-wider text-slate-500 font-mono">คลังบทความทั้งหมด</span>
-                <p className="text-2xl font-mono font-bold text-teal-400 mt-1">{archivedArticles.length}</p>
-                <span className="text-4xs text-slate-500 font-sans mt-0.5 block">ใน Google Drive Index</span>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-xl bg-[#0c1220]/20 border border-slate-900 backdrop-blur-xs">
+                <span className="text-[9px] uppercase tracking-wider text-slate-500 font-mono">
+                  คลังบทความ
+                </span>
+                <p className="text-lg font-mono font-bold text-teal-400 mt-0.5">
+                  {archivedArticles.length}
+                </p>
+                <span className="text-[8px] text-slate-550 font-sans mt-0.5 block leading-none">
+                  ใน Drive Index
+                </span>
               </div>
-              <div className="p-4 rounded-2xl bg-[#0c1220]/20 border border-slate-900 backdrop-blur-xs">
-                <span className="text-3xs uppercase tracking-wider text-slate-500 font-mono">แปลสำเร็จรอบนี้</span>
-                <p className="text-2xl font-mono font-bold text-[#fda4af] mt-1">{newlySynced.length}</p>
-                <span className="text-4xs text-slate-500 font-sans mt-0.5 block">ในเซสชันการทำงานปัจจุบัน</span>
+              <div className="p-3 rounded-xl bg-[#0c1220]/20 border border-slate-900 backdrop-blur-xs">
+                <span className="text-[9px] uppercase tracking-wider text-slate-500 font-mono">
+                  แปลสำเร็จ
+                </span>
+                <p className="text-lg font-mono font-bold text-[#fda4af] mt-0.5">
+                  {newlySynced.length}
+                </p>
+                <span className="text-[8px] text-slate-550 font-sans mt-0.5 block leading-none">
+                  ในเซสชันนี้
+                </span>
               </div>
             </div>
 
             {/* Console / Log Terminal */}
-            <div className="bg-[#060913] border border-slate-900 rounded-2xl overflow-hidden flex flex-col h-[400px] shadow-2xl relative">
+            <div className="bg-[#060913] border border-slate-900 rounded-2xl overflow-hidden flex flex-col h-[320px] shadow-2xl relative">
               {/* Mac window header */}
-              <div className="bg-[#0c1220]/85 px-4 py-2.5 border-b border-slate-900/60 flex justify-between items-center backdrop-blur-sm">
+              <div className="bg-[#0c1220]/85 px-4 py-1.5 border-b border-slate-900/60 flex justify-between items-center backdrop-blur-sm">
                 <div className="flex gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500/40 border border-rose-500/20" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500/40 border border-amber-500/20" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/40 border border-emerald-500/20" />
+                  <span className="w-2 rounded-full h-2 bg-rose-500/40 border border-rose-500/20" />
+                  <span className="w-2 rounded-full h-2 bg-amber-500/40 border border-amber-500/20" />
+                  <span className="w-2 rounded-full h-2 bg-emerald-500/40 border border-emerald-500/20" />
                 </div>
-                <span className="text-3xs text-slate-500 font-mono tracking-wide uppercase">live_operation.sh</span>
+                <span className="text-[9px] text-slate-550 font-mono tracking-wide uppercase">
+                  live_operation.sh
+                </span>
                 <span className="w-8" />
               </div>
 
-              <div className="p-4 flex-1 overflow-y-auto font-mono text-3xs space-y-2 scrollbar-thin scrollbar-thumb-slate-800 bg-[#060913]">
+              <div className="p-3 flex-1 overflow-y-auto font-mono text-[9px] space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 bg-[#060913]">
                 {logs.length === 0 ? (
-                  <div className="text-slate-655 italic font-sans">
-                    รอเริ่มการซิงค์ข้อมูล... กรุณากดปุ่ม &quot;ซิงค์ข้อมูลระบบ&quot; ในแผงควบคุมขวา
+                  <div className="text-slate-655 italic font-sans text-3xs">
+                    รอเริ่มการซิงค์ข้อมูล... กรุณากดปุ่ม
+                    &quot;ซิงค์ข้อมูลระบบ&quot; ในแผงควบคุมขวา
                   </div>
                 ) : (
                   logs.map((log, idx) => (
@@ -1040,8 +1157,8 @@ export default function Dashboard() {
 
               {/* Progress Bar */}
               {isSyncing && (
-                <div className="bg-[#0c1220]/60 border-t border-slate-900 px-4 py-3.5 backdrop-blur-xs">
-                  <div className="flex justify-between items-center text-3xs mb-2">
+                <div className="bg-[#0c1220]/60 border-t border-slate-900 px-4 py-2.5 backdrop-blur-xs">
+                  <div className="flex justify-between items-center text-[9px] mb-1.5">
                     <span className="truncate max-w-[80%] text-slate-455 font-sans tracking-wide">
                       {statusMessage}
                     </span>
@@ -1063,12 +1180,15 @@ export default function Dashboard() {
           {/* RIGHT COLUMN: DESK CONTROLS */}
           <section className="lg:col-span-3 space-y-6">
             <div>
-              <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">ศูนย์ควบคุมการซิงค์</h2>
-              <p className="text-3xs text-slate-500 font-sans mt-0.5">Control Panel & Synchronizer</p>
+              <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">
+                ศูนย์ควบคุมการซิงค์
+              </h2>
+              <p className="text-3xs text-slate-500 font-sans mt-0.5">
+                Control Panel & Synchronizer
+              </p>
             </div>
 
             <div className="p-6 bg-[#0c1220]/30 border border-slate-900 rounded-2xl backdrop-blur-md flex flex-col items-center justify-between shadow-xl relative z-20">
-              
               {/* Lotus Orbit Signature Component */}
               <div className="py-2 w-full">
                 <LotusFlower active={isSyncing} progress={progressPercent} />
@@ -1078,7 +1198,9 @@ export default function Dashboard() {
               <div className="text-center w-full px-2 mb-6">
                 {!isSyncing ? (
                   <p className="text-3xs text-slate-455 leading-relaxed font-sans">
-                    ระบบพร้อมสำหรับการเริ่มดึงข้อมูล (Scraping) แปลความด้วย AI (Gemini Translator) และนำเข้าบัญชีจัดเก็บ Google Drive ของระบบแบบเรียลไทม์
+                    ระบบพร้อมสำหรับการเริ่มดึงข้อมูล (Scraping) แปลความด้วย AI
+                    (Gemini Translator) และนำเข้าบัญชีจัดเก็บ Google Drive
+                    ของระบบแบบเรียลไทม์
                   </p>
                 ) : (
                   <p className="text-3xs text-teal-400 animate-pulse font-mono uppercase tracking-widest font-bold">
@@ -1089,7 +1211,6 @@ export default function Dashboard() {
 
               {/* Date Filter & Control Buttons */}
               <div className="w-full space-y-4">
-                
                 {/* Calendar Trigger */}
                 <div className="space-y-1.5 relative w-full" ref={calendarRef}>
                   <label className="block text-4xs font-bold text-slate-500 uppercase tracking-widest font-mono">
@@ -1102,11 +1223,29 @@ export default function Dashboard() {
                     className="w-full bg-[#060913] border border-slate-900 rounded-xl px-4 py-2.5 text-xs text-slate-350 hover:border-slate-800 focus:outline-none transition-all flex items-center justify-between group disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <div className="flex items-center gap-2">
-                      <svg className="w-3.5 h-3.5 text-slate-550 group-hover:text-teal-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      <svg
+                        className="w-3.5 h-3.5 text-slate-550 group-hover:text-teal-400 transition-colors"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                        />
                       </svg>
-                      <span className={selectedDate ? "text-teal-400 font-semibold" : "text-slate-500 font-medium"}>
-                        {selectedDate ? formatThaiDateShort(selectedDate) : "ดึงทั้งหมด (ไม่มีกรอง)"}
+                      <span
+                        className={
+                          selectedDate
+                            ? "text-teal-400 font-semibold"
+                            : "text-slate-500 font-medium"
+                        }
+                      >
+                        {selectedDate
+                          ? formatThaiDateShort(selectedDate)
+                          : "ดึงทั้งหมด (ไม่มีกรอง)"}
                       </span>
                     </div>
 
@@ -1122,8 +1261,18 @@ export default function Dashboard() {
                           ล้างค่า
                         </span>
                       )}
-                      <svg className={`w-3.5 h-3.5 text-slate-550 group-hover:text-slate-300 transition-transform duration-200 ${showCalendar ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                      <svg
+                        className={`w-3.5 h-3.5 text-slate-550 group-hover:text-slate-300 transition-transform duration-200 ${showCalendar ? "rotate-180" : ""}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2.5"
+                          d="M19 9l-7 7-7-7"
+                        />
                       </svg>
                     </div>
                   </button>
@@ -1134,36 +1283,76 @@ export default function Dashboard() {
                       <div className="flex justify-between items-center">
                         <button
                           type="button"
-                          onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}
+                          onClick={() =>
+                            setViewDate(
+                              new Date(
+                                viewDate.getFullYear(),
+                                viewDate.getMonth() - 1,
+                                1,
+                              ),
+                            )
+                          }
                           className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-450 hover:text-slate-200 transition-colors cursor-pointer"
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+                          <svg
+                            className="w-3.5 h-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2.5"
+                              d="M15 19l-7-7 7-7"
+                            />
                           </svg>
                         </button>
                         <span className="text-xs font-semibold text-slate-200 font-sans">
-                          {monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}
+                          {monthNames[viewDate.getMonth()]}{" "}
+                          {viewDate.getFullYear()}
                         </span>
                         <button
                           type="button"
-                          onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}
+                          onClick={() =>
+                            setViewDate(
+                              new Date(
+                                viewDate.getFullYear(),
+                                viewDate.getMonth() + 1,
+                                1,
+                              ),
+                            )
+                          }
                           className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-450 hover:text-slate-200 transition-colors cursor-pointer"
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
+                          <svg
+                            className="w-3.5 h-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2.5"
+                              d="M9 5l7 7-7 7"
+                            />
                           </svg>
                         </button>
                       </div>
 
                       <div className="grid grid-cols-7 gap-1 text-center text-4xs font-semibold text-slate-505 uppercase tracking-widest font-mono">
-                        {daysOfWeek.map((day) => <div key={day}>{day}</div>)}
+                        {daysOfWeek.map((day) => (
+                          <div key={day}>{day}</div>
+                        ))}
                       </div>
 
                       <div className="grid grid-cols-7 gap-1">
                         {/* Calendar Grid Days */}
                         {generateCalendarDays().map((item, idx) => {
                           const isSel = selectedDate === item.dateStr;
-                          const isTod = formatDateToString(new Date()) === item.dateStr;
+                          const isTod =
+                            formatDateToString(new Date()) === item.dateStr;
                           return (
                             <button
                               key={idx}
@@ -1220,14 +1409,19 @@ export default function Dashboard() {
                     <span className="text-3xs text-slate-500 font-medium text-center leading-normal font-sans">
                       จำเป็นต้องลงชื่อเข้าบัญชีของเจ้าของสิทธิ์ระบบเพื่อซิงค์ข้อมูล
                     </span>
-                    <div id="google-signin-btn" className="w-full flex justify-center py-1 scale-95" />
+                    <div
+                      id="google-signin-btn"
+                      className="w-full flex justify-center py-1 scale-95"
+                    />
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between bg-[#060913] border border-slate-900 px-3.5 py-2.5 rounded-xl text-3xs">
                       <div className="flex items-center gap-1.5 truncate max-w-[70%]">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-opacity" />
-                        <span className="text-slate-350 font-mono truncate">{userEmail}</span>
+                        <span className="text-slate-350 font-mono truncate">
+                          {userEmail}
+                        </span>
                       </div>
                       <button
                         type="button"
@@ -1247,9 +1441,24 @@ export default function Dashboard() {
                           disabled
                           className="flex-1 py-3 px-4 rounded-xl font-bold text-xs bg-slate-900 text-slate-550 border border-slate-900 flex items-center justify-center gap-2 cursor-not-allowed font-sans"
                         >
-                          <svg className="animate-spin h-4 w-4 text-slate-550" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          <svg
+                            className="animate-spin h-4 w-4 text-slate-550"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            />
                           </svg>
                           กำลังซิงค์...
                         </button>
@@ -1271,8 +1480,18 @@ export default function Dashboard() {
                         onClick={handleSync}
                         className="w-full py-3 px-4 rounded-xl font-bold text-xs shadow-lg transition-all duration-300 flex items-center justify-center gap-2 bg-teal-500 text-slate-950 hover:bg-teal-400 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-teal-500/15 font-sans"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+                          />
                         </svg>
                         ซิงค์ข้อมูลระบบ
                       </button>
@@ -1282,7 +1501,6 @@ export default function Dashboard() {
               </div>
             </div>
           </section>
-
         </div>
       </main>
 
@@ -1292,13 +1510,22 @@ export default function Dashboard() {
           {/* Reader Header */}
           <div className="sticky top-0 bg-[#060913]/90 border-b border-slate-900/60 backdrop-blur-md z-30 px-4 py-3.5 sm:px-6 lg:px-8">
             <div className="max-w-5xl mx-auto flex items-center justify-between font-sans">
-              
               <button
                 onClick={closeArticle}
                 className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors font-semibold cursor-pointer"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2.5"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
                 </svg>
                 กลับหน้าหลัก
               </button>
@@ -1345,15 +1572,35 @@ export default function Dashboard() {
               >
                 {copied ? (
                   <>
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                    <svg
+                      className="w-3.5 h-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2.5"
+                        d="M5 13l4 4L19 7"
+                      />
                     </svg>
                     <span>คัดลอกแล้ว!</span>
                   </>
                 ) : (
                   <>
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                    <svg
+                      className="w-3.5 h-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"
+                      />
                     </svg>
                     <span>ลิงก์สำหรับแชร์</span>
                   </>
@@ -1364,10 +1611,15 @@ export default function Dashboard() {
 
           {/* Reader Content Container */}
           <div className="flex-1 max-w-5xl w-full mx-auto px-4 py-8 sm:px-6 lg:px-8 relative">
-            
             {/* Watermark Lotus Flower in background */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02] select-none">
-              <svg className="w-[500px] h-[500px]" viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="1">
+              <svg
+                className="w-[500px] h-[500px]"
+                viewBox="0 0 100 100"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1"
+              >
                 <path d="M50 80 C15 70, 10 40, 50 20 C90 40, 85 70, 50 80 Z" />
                 <path d="M50 80 C20 75, 20 45, 50 35 C80 45, 80 75, 50 80 Z" />
                 <path d="M50 80 C32 75, 32 50, 50 42 C68 50, 68 75, 50 80 Z" />
@@ -1376,11 +1628,28 @@ export default function Dashboard() {
 
             {isLoadingArticle ? (
               <div className="h-[60vh] flex flex-col items-center justify-center text-slate-550 space-y-4 relative z-10 font-sans">
-                <svg className="animate-spin h-8 w-8 text-teal-500" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                <svg
+                  className="animate-spin h-8 w-8 text-teal-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
                 </svg>
-                <p className="text-[10px] uppercase tracking-wider text-slate-450 font-mono">กำลังโหลดเนื้อหาจาก Drive...</p>
+                <p className="text-[10px] uppercase tracking-wider text-slate-450 font-mono">
+                  กำลังโหลดเนื้อหาจาก Drive...
+                </p>
               </div>
             ) : articleContent ? (
               <article className="space-y-8 relative z-10">
