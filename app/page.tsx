@@ -1290,7 +1290,7 @@ export default function Dashboard() {
       {readingArticlePath && (
         <div className="fixed inset-0 z-50 bg-[#060913]/98 overflow-y-auto backdrop-blur-xl flex flex-col animate-fade-in select-text">
           {/* Reader Header */}
-          <div className="sticky top-0 bg-[#060913]/90 border-b border-slate-900/60 backdrop-blur-md z-10 px-4 py-3.5 sm:px-6 lg:px-8">
+          <div className="sticky top-0 bg-[#060913]/90 border-b border-slate-900/60 backdrop-blur-md z-30 px-4 py-3.5 sm:px-6 lg:px-8">
             <div className="max-w-5xl mx-auto flex items-center justify-between font-sans">
               
               <button
