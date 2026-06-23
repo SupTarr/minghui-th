@@ -61,6 +61,67 @@ function DashboardContent() {
   }
 
   const [copied, setCopied] = useState(false);
+  const [googleIdToken, setGoogleIdToken] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  function handleGoogleLoginResponse(response: any) {
+    const idToken = response.credential;
+    setGoogleIdToken(idToken);
+    
+    try {
+      const payload = JSON.parse(atob(idToken.split('.')[1]));
+      setUserEmail(payload.email);
+      localStorage.setItem('google_id_token', idToken);
+      localStorage.setItem('google_user_email', payload.email);
+    } catch (e) {
+      console.error('Failed to parse ID token payload', e);
+    }
+  }
+
+  function handleSignOut() {
+    setGoogleIdToken(null);
+    setUserEmail(null);
+    localStorage.removeItem('google_id_token');
+    localStorage.removeItem('google_user_email');
+  }
+
+  // Load Google Identity Services dynamically
+  useEffect(() => {
+    const token = localStorage.getItem('google_id_token');
+    const email = localStorage.getItem('google_user_email');
+    if (token && email) {
+      setGoogleIdToken(token);
+      setUserEmail(email);
+    }
+
+    fetch('/api/auth/config')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.clientId) {
+          const script = document.createElement('script');
+          script.src = 'https://accounts.google.com/gsi/client';
+          script.async = true;
+          script.defer = true;
+          document.body.appendChild(script);
+          
+          script.onload = () => {
+            const google = (window as any).google;
+            if (google) {
+              google.accounts.id.initialize({
+                client_id: data.clientId,
+                callback: handleGoogleLoginResponse,
+              });
+              
+              const btn = document.getElementById('google-signin-btn');
+              if (btn) {
+                google.accounts.id.renderButton(btn, { theme: 'outline', size: 'large' });
+              }
+            }
+          };
+        }
+      })
+      .catch((err) => console.error('Failed to load auth config:', err));
+  }, []);
 
   function handleCopyShareLink() {
     if (!readingArticlePath) return;
@@ -337,8 +398,14 @@ function DashboardContent() {
       // 1. Scrape
       const scrapeRes = await fetch('/api/scrape', { 
         method: 'POST',
+        headers: {
+          'X-Google-ID-Token': googleIdToken || '',
+        },
         signal: controller.signal
       });
+      if (scrapeRes.status === 401 || scrapeRes.status === 403) {
+        throw new Error('Unauthorized');
+      }
       if (!scrapeRes.ok) {
         throw new Error(`Scrape API failed (Status ${scrapeRes.status})`);
       }
@@ -386,7 +453,10 @@ function DashboardContent() {
 
         const transRes = await fetch('/api/translate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Google-ID-Token': googleIdToken || '',
+          },
           body: JSON.stringify({ url: article.url }),
           signal: controller.signal
         });
@@ -395,6 +465,9 @@ function DashboardContent() {
           throw new DOMException('Aborted by user', 'AbortError');
         }
 
+        if (transRes.status === 401 || transRes.status === 403) {
+          throw new Error('Unauthorized');
+        }
         if (!transRes.ok) {
           addLog(`❌ แปลล้มเหลวสำหรับบทความ: ${article.title_en}`);
           continue;
@@ -410,7 +483,10 @@ function DashboardContent() {
 
         const saveRes = await fetch('/api/save', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Google-ID-Token': googleIdToken || '',
+          },
           body: JSON.stringify({
             url: article.url,
             title_en: article.title_en,
@@ -426,6 +502,9 @@ function DashboardContent() {
           throw new DOMException('Aborted by user', 'AbortError');
         }
 
+        if (saveRes.status === 401 || saveRes.status === 403) {
+          throw new Error('Unauthorized');
+        }
         if (!saveRes.ok) {
           addLog(`❌ บันทึกล้มเหลวสำหรับบทความ: ${transData.title_th}`);
           continue;
@@ -469,8 +548,14 @@ function DashboardContent() {
         setStatusMessage('ยกเลิกกระบวนการซิงค์เรียบร้อยแล้ว');
       } else {
         console.error(error);
-        setStatusMessage('เกิดข้อผิดพลาดในการแปล/บันทึก');
-        addLog(`❌ ข้อผิดพลาด: ${error.message || error}`);
+        if (error.message.includes('Unauthorized') || error.message.includes('401') || error.message.includes('403')) {
+          addLog('❌ การยืนยันสิทธิ์บัญชี Google ล้มเหลว หรือเซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+          setStatusMessage('สิทธิ์การเข้าถึงหมดอายุ/ไม่ถูกต้อง');
+          handleSignOut();
+        } else {
+          setStatusMessage('เกิดข้อผิดพลาดในการแปล/บันทึก');
+          addLog(`❌ ข้อผิดพลาด: ${error.message || error}`);
+        }
       }
     } finally {
       setIsSyncing(false);
@@ -652,41 +737,67 @@ function DashboardContent() {
               )}
             </div>
             
-            {isSyncing ? (
-              <div className="flex gap-2.5 w-full">
-                <button
-                  disabled
-                  className="flex-1 py-3.5 px-4 rounded-xl font-semibold shadow-lg flex items-center justify-center gap-2 bg-slate-900 text-slate-500 cursor-not-allowed border border-slate-800/80"
-                >
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  กำลังรันระบบ...
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  disabled={isCancelling}
-                  className={`px-5 py-3.5 rounded-xl font-semibold border transition-all duration-300 active:scale-95 ${
-                    isCancelling
-                      ? 'bg-rose-500/10 border-rose-500/20 text-rose-500/50 cursor-not-allowed'
-                      : 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-500/30 text-rose-300 hover:text-rose-100 shadow-lg shadow-rose-500/5 cursor-pointer'
-                  }`}
-                >
-                  {isCancelling ? 'กำลังยกเลิก...' : 'ยกเลิก'}
-                </button>
+            {!googleIdToken ? (
+              <div className="flex flex-col items-center justify-center p-5 bg-slate-900/30 border border-slate-800 rounded-2xl space-y-3 shadow-inner">
+                <span className="text-xs text-slate-400 font-medium font-sans">ลงชื่อเข้าใช้ Google เพื่อจัดการระบบ</span>
+                <div id="google-signin-btn" className="w-full flex justify-center py-1" />
               </div>
             ) : (
-              <button
-                onClick={handleSync}
-                className="w-full py-3.5 px-4 rounded-xl font-semibold shadow-lg transition-all duration-300 flex items-center justify-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 shadow-teal-500/10"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
-                Fetch บทความใหม่
-              </button>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center bg-slate-900/50 border border-slate-800/80 px-4 py-3 rounded-2xl text-xs">
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-slate-300 font-mono font-semibold truncate max-w-[150px] sm:max-w-xs">{userEmail}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="text-rose-400 hover:text-rose-300 font-semibold cursor-pointer transition-colors px-2 py-1 rounded-lg hover:bg-rose-500/10"
+                  >
+                    ออกจากระบบ
+                  </button>
+                </div>
+                
+                {/* Hidden container to keep script happy */}
+                <div id="google-signin-btn" className="hidden" />
+
+                {isSyncing ? (
+                  <div className="flex gap-2.5 w-full">
+                    <button
+                      disabled
+                      className="flex-1 py-3.5 px-4 rounded-xl font-semibold shadow-lg flex items-center justify-center gap-2 bg-slate-900 text-slate-500 cursor-not-allowed border border-slate-800/80"
+                    >
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      กำลังรันระบบ...
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancel}
+                      disabled={isCancelling}
+                      className={`px-5 py-3.5 rounded-xl font-semibold border transition-all duration-300 active:scale-95 ${
+                        isCancelling
+                          ? 'bg-rose-500/10 border-rose-500/20 text-rose-500/50 cursor-not-allowed'
+                          : 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-500/30 text-rose-300 hover:text-rose-100 shadow-lg shadow-rose-500/5 cursor-pointer'
+                      }`}
+                    >
+                      {isCancelling ? 'กำลังยกเลิก...' : 'ยกเลิก'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleSync}
+                    className="w-full py-3.5 px-4 rounded-xl font-semibold shadow-lg transition-all duration-300 flex items-center justify-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 shadow-teal-500/10"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                    Fetch บทความใหม่
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
