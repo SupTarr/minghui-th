@@ -2,10 +2,22 @@ import { google, drive_v3 } from "googleapis";
 
 const SCOPES = ["https://www.googleapis.com/auth/drive"];
 
+// Cache tag for the read paths (article list + content). Bump via revalidateTag
+// whenever the catalog changes so new articles appear without waiting for TTL.
+export const ARCHIVE_CACHE_TAG = "archive";
+
+// Reuse the Drive client across invocations within a warm container. Building a
+// fresh client per call discards googleapis' cached OAuth access token, forcing
+// a token refresh on every Drive operation; a singleton refreshes once and
+// reuses the HTTP connection.
+let cachedDrive: drive_v3.Drive | null = null;
+
 /**
  * Initializes the Google Drive API client using either OAuth2 or Service Account JWT.
  */
-export function initDrive() {
+export function initDrive(): drive_v3.Drive {
+  if (cachedDrive) return cachedDrive;
+
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
@@ -14,7 +26,8 @@ export function initDrive() {
   if (clientId && clientSecret && refreshToken) {
     const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
     oauth2Client.setCredentials({ refresh_token: refreshToken });
-    return google.drive({ version: "v3", auth: oauth2Client });
+    cachedDrive = google.drive({ version: "v3", auth: oauth2Client });
+    return cachedDrive;
   }
 
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -36,7 +49,8 @@ export function initDrive() {
     scopes: SCOPES,
   });
 
-  return google.drive({ version: "v3", auth });
+  cachedDrive = google.drive({ version: "v3", auth });
+  return cachedDrive;
 }
 
 /**
@@ -94,11 +108,18 @@ async function resolvePathToId(
   return currentParentId;
 }
 
+// The root folder ID is stable for the process lifetime; cache it so a path-form
+// GOOGLE_DRIVE_FOLDER_ID isn't re-resolved (one list call per segment) on every
+// read/write.
+let cachedRootFolderId: string | null = null;
+
 /**
  * Returns the resolved Google Drive root folder ID.
  * If GOOGLE_DRIVE_FOLDER_ID contains a path (e.g., /Folder/Subfolder), it resolves it to an ID.
  */
 export async function getRootFolderId(drive: drive_v3.Drive): Promise<string> {
+  if (cachedRootFolderId) return cachedRootFolderId;
+
   const rawId = process.env.GOOGLE_DRIVE_FOLDER_ID;
   if (!rawId) {
     throw new Error(
@@ -106,11 +127,11 @@ export async function getRootFolderId(drive: drive_v3.Drive): Promise<string> {
     );
   }
 
-  if (rawId.includes("/")) {
-    return await resolvePathToId(drive, rawId);
-  }
+  cachedRootFolderId = rawId.includes("/")
+    ? await resolvePathToId(drive, rawId)
+    : rawId;
 
-  return rawId;
+  return cachedRootFolderId;
 }
 
 /**

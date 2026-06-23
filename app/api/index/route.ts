@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { readDayIndex, writeDayIndex, type CatalogEntry } from "@/lib/gdrive";
+import { revalidateTag } from "next/cache";
+import {
+  readDayIndex,
+  writeDayIndex,
+  ARCHIVE_CACHE_TAG,
+  type CatalogEntry,
+} from "@/lib/gdrive";
 import { authorize } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -55,6 +61,13 @@ export async function POST(req: Request) {
       await writeDayIndex(date, Array.from(merged.values()));
       added += dayEntries.length;
       days.push(date);
+    }
+
+    // New articles landed — expire the cached read paths immediately so they
+    // show up on the next load instead of serving stale (expire:0 is the
+    // sanctioned route-handler pattern for immediate invalidation in Next 16).
+    if (days.length > 0) {
+      revalidateTag(ARCHIVE_CACHE_TAG, { expire: 0 });
     }
 
     return NextResponse.json({ success: true, added, days });
