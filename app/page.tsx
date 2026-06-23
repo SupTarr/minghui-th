@@ -40,6 +40,16 @@ export default function Dashboard() {
     }
   }
 
+  const [copied, setCopied] = useState(false);
+
+  function handleCopyShareLink() {
+    if (!readingArticlePath) return;
+    const shareUrl = `${window.location.origin}${window.location.pathname}?article=${encodeURIComponent(readingArticlePath)}`;
+    navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   // Fetch article content on path update
   useEffect(() => {
     if (readingArticlePath) {
@@ -48,6 +58,44 @@ export default function Dashboard() {
       setArticleContent(null);
     }
   }, [readingArticlePath]);
+
+  // Synchronize readingArticlePath with URL query parameter
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const currentParam = params.get('article');
+    
+    if (readingArticlePath) {
+      if (currentParam !== readingArticlePath) {
+        params.set('article', readingArticlePath);
+        const newUrl = `${window.location.pathname}?${params.toString()}`;
+        window.history.pushState({ path: newUrl }, '', newUrl);
+      }
+    } else {
+      if (params.has('article')) {
+        params.delete('article');
+        const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
+        window.history.pushState({ path: newUrl }, '', newUrl);
+      }
+    }
+  }, [readingArticlePath]);
+
+  // Check query params on mount and handle popstate (browser back/forward button)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const articleParam = params.get('article');
+    if (articleParam) {
+      setReadingArticlePath(articleParam);
+    }
+
+    function handlePopState() {
+      const p = new URLSearchParams(window.location.search);
+      const art = p.get('article');
+      setReadingArticlePath(art || null);
+    }
+    
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   async function loadArticleContent(path: string) {
     try {
@@ -896,7 +944,27 @@ export default function Dashboard() {
                 </div>
               )}
 
-              <div className="w-20 hidden sm:block" />
+              <button
+                type="button"
+                onClick={handleCopyShareLink}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-950 border border-slate-800 text-teal-400 hover:text-teal-300 hover:bg-slate-900 transition-all duration-200 shadow-md shadow-teal-500/5 active:scale-95"
+              >
+                {copied ? (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>คัดลอกสำเร็จ!</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                    </svg>
+                    <span>คัดลอกลิงก์</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
