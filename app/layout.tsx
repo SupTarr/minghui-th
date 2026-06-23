@@ -14,7 +14,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Minghui Insights (TH)",
-  description: "ระบบแปลบทความแชร์ประสบการณ์บำเพ็ญธรรมจาก en.minghui.org เป็นภาษาไทยอัตโนมัติ",
+  description:
+    "ระบบแปลบทความแชร์ประสบการณ์บำเพ็ญธรรมจาก en.minghui.org เป็นภาษาไทยอัตโนมัติ",
 };
 
 export default function RootLayout({

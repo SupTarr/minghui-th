@@ -1,52 +1,57 @@
-import { NextResponse } from 'next/server';
-import * as cheerio from 'cheerio';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { isAuthorized } from '@/lib/auth';
+import { NextResponse } from "next/server";
+import * as cheerio from "cheerio";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { isAuthorized } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
     if (!(await isAuthorized(req))) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { url } = await req.json();
 
     if (!url) {
-      return NextResponse.json({ error: 'Missing article URL' }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing article URL" },
+        { status: 400 },
+      );
     }
 
     // 1. Fetch the individual article HTML
     const response = await fetch(url, {
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       },
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch article page: status ${response.status}`);
+      throw new Error(
+        `Failed to fetch article page: status ${response.status}`,
+      );
     }
 
     const html = await response.text();
     const $ = cheerio.load(html);
 
     // 2. Extract English title & content paragraphs
-    const title_en = $('.article-title').text().trim();
+    const title_en = $(".article-title").text().trim();
     if (!title_en) {
-      throw new Error('Could not find article title on the page.');
+      throw new Error("Could not find article title on the page.");
     }
 
     const contentElements: string[] = [];
-    $('.article-body-content')
-      .find('p, h1, h2, h3, h4, h5, h6, blockquote, li, td, th, pre, code')
+    $(".article-body-content")
+      .find("p, h1, h2, h3, h4, h5, h6, blockquote, li, td, th, pre, code")
       .each((_, el) => {
         const element = $(el);
         // Skip metadata section (class="splitted") and copyright notices
         if (
-          element.hasClass('splitted') ||
-          element.closest('.splitted').length > 0 ||
-          element.hasClass('copyright-notice') ||
-          element.closest('.copyright-notice').length > 0
+          element.hasClass("splitted") ||
+          element.closest(".splitted").length > 0 ||
+          element.hasClass("copyright-notice") ||
+          element.closest(".copyright-notice").length > 0
         ) {
           return;
         }
@@ -54,7 +59,9 @@ export async function POST(req: Request) {
         // Avoid duplicating text by checking if an ancestor element is also in our matched set
         const parentSelected = element
           .parent()
-          .closest('p, h1, h2, h3, h4, h5, h6, blockquote, li, td, th, pre, code');
+          .closest(
+            "p, h1, h2, h3, h4, h5, h6, blockquote, li, td, th, pre, code",
+          );
         if (parentSelected.length > 0) {
           return;
         }
@@ -65,42 +72,44 @@ export async function POST(req: Request) {
         const tagName = el.tagName.toLowerCase();
 
         // Convert elements to standard markdown indicators for formatting
-        if (tagName === 'h1') {
+        if (tagName === "h1") {
           text = `# ${text}`;
-        } else if (tagName === 'h2') {
+        } else if (tagName === "h2") {
           text = `## ${text}`;
-        } else if (tagName === 'h3') {
+        } else if (tagName === "h3") {
           text = `### ${text}`;
-        } else if (tagName.startsWith('h')) {
+        } else if (tagName.startsWith("h")) {
           text = `#### ${text}`;
-        } else if (tagName === 'blockquote') {
+        } else if (tagName === "blockquote") {
           text = `> ${text}`;
-        } else if (tagName === 'li') {
+        } else if (tagName === "li") {
           text = `- ${text}`;
-        } else if (tagName === 'pre' || tagName === 'code') {
+        } else if (tagName === "pre" || tagName === "code") {
           text = `\`\`\`\n${text}\n\`\`\``;
         }
 
         contentElements.push(text);
       });
 
-    const content_en = contentElements.join('\n\n');
+    const content_en = contentElements.join("\n\n");
     if (!content_en) {
-      throw new Error('Could not extract any content paragraphs from the article.');
+      throw new Error(
+        "Could not extract any content paragraphs from the article.",
+      );
     }
 
     // 3. Initialize Gemini client
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY environment variable is not defined.');
+      throw new Error("GEMINI_API_KEY environment variable is not defined.");
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
     // Use gemini-2.5-flash as the standard robust and fast model
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
+      model: "gemini-2.5-flash",
       generationConfig: {
-        responseMimeType: 'application/json',
+        responseMimeType: "application/json",
       },
     });
 
@@ -128,14 +137,14 @@ Article content: ${content_en}`;
         content_th: parsedTranslation.content_th,
       });
     } catch (parseError) {
-      console.error('Failed to parse JSON response from Gemini:', responseText);
-      throw new Error('Gemini API did not return valid JSON translation.');
+      console.error("Failed to parse JSON response from Gemini:", responseText);
+      throw new Error("Gemini API did not return valid JSON translation.");
     }
   } catch (error: any) {
-    console.error('Error in /api/translate:', error);
+    console.error("Error in /api/translate:", error);
     return NextResponse.json(
-      { error: error.message || 'Internal Server Error' },
-      { status: 500 }
+      { error: error.message || "Internal Server Error" },
+      { status: 500 },
     );
   }
 }
