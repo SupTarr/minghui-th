@@ -1,17 +1,17 @@
-import { NextResponse } from 'next/server';
-import { readFileAtPath } from '@/lib/gdrive';
+import { NextResponse } from "next/server";
+import { readFileAtPath } from "@/lib/gdrive";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const filePath = searchParams.get('filePath');
+    const filePath = searchParams.get("filePath");
 
     if (!filePath) {
       return NextResponse.json(
         { error: 'Missing required query parameter "filePath"' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -19,16 +19,16 @@ export async function GET(req: Request) {
     if (!content) {
       return NextResponse.json(
         { error: `Article at path "${filePath}" not found` },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     return NextResponse.json(content);
   } catch (error: any) {
-    console.error('Error in GET /api/article:', error);
+    console.error("Error in GET /api/article:", error);
     return NextResponse.json(
-      { error: error.message || 'Internal Server Error' },
-      { status: 500 }
+      { error: error.message || "Internal Server Error" },
+      { status: 500 },
     );
   }
 }

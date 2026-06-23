@@ -1,6 +1,6 @@
-import { google } from 'googleapis';
+import { google } from "googleapis";
 
-const SCOPES = ['https://www.googleapis.com/auth/drive'];
+const SCOPES = ["https://www.googleapis.com/auth/drive"];
 
 /**
  * Initializes the Google Drive API client using either OAuth2 or Service Account JWT.
@@ -14,7 +14,7 @@ export function initDrive() {
   if (clientId && clientSecret && refreshToken) {
     const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
     oauth2Client.setCredentials({ refresh_token: refreshToken });
-    return google.drive({ version: 'v3', auth: oauth2Client });
+    return google.drive({ version: "v3", auth: oauth2Client });
   }
 
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -23,12 +23,12 @@ export function initDrive() {
   // 2. Fallback to Service Account (Recommended for Google Workspace Shared Drives)
   if (!email || !privateKey) {
     throw new Error(
-      'Missing Google credentials. Please provide either OAuth2 variables (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN) or Service Account variables (GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY).'
+      "Missing Google credentials. Please provide either OAuth2 variables (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN) or Service Account variables (GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY).",
     );
   }
 
   // Format the private key to handle literal \n
-  const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
+  const formattedPrivateKey = privateKey.replace(/\\n/g, "\n");
 
   const auth = new google.auth.JWT({
     email,
@@ -36,7 +36,7 @@ export function initDrive() {
     scopes: SCOPES,
   });
 
-  return google.drive({ version: 'v3', auth });
+  return google.drive({ version: "v3", auth });
 }
 
 /**
@@ -52,7 +52,7 @@ function getListParams(query: string, fields: string) {
 
   const driveId = process.env.GOOGLE_DRIVE_ID;
   if (driveId) {
-    params.corpora = 'drive';
+    params.corpora = "drive";
     params.driveId = driveId;
   }
 
@@ -60,12 +60,12 @@ function getListParams(query: string, fields: string) {
 }
 
 async function resolvePathToId(drive: any, path: string): Promise<string> {
-  const parts = path.split('/').filter((p) => p.length > 0);
-  let currentParentId = 'root';
+  const parts = path.split("/").filter((p) => p.length > 0);
+  let currentParentId = "root";
 
   for (const part of parts) {
     const query = `mimeType = 'application/vnd.google-apps.folder' and name = '${part}' and '${currentParentId}' in parents and trashed = false`;
-    const res = await drive.files.list(getListParams(query, 'files(id)'));
+    const res = await drive.files.list(getListParams(query, "files(id)"));
 
     const files = res.data.files;
     if (files && files.length > 0) {
@@ -76,10 +76,10 @@ async function resolvePathToId(drive: any, path: string): Promise<string> {
         supportsAllDrives: true,
         requestBody: {
           name: part,
-          mimeType: 'application/vnd.google-apps.folder',
+          mimeType: "application/vnd.google-apps.folder",
           parents: [currentParentId],
         },
-        fields: 'id',
+        fields: "id",
       });
       currentParentId = createRes.data.id!;
     }
@@ -95,10 +95,12 @@ async function resolvePathToId(drive: any, path: string): Promise<string> {
 export async function getRootFolderId(drive: any): Promise<string> {
   const rawId = process.env.GOOGLE_DRIVE_FOLDER_ID;
   if (!rawId) {
-    throw new Error('GOOGLE_DRIVE_FOLDER_ID is not defined in environment variables.');
+    throw new Error(
+      "GOOGLE_DRIVE_FOLDER_ID is not defined in environment variables.",
+    );
   }
 
-  if (rawId.includes('/')) {
+  if (rawId.includes("/")) {
     return await resolvePathToId(drive, rawId);
   }
 
@@ -109,12 +111,17 @@ export async function getRootFolderId(drive: any): Promise<string> {
  * Checks if a folder exists inside a parent folder, and creates it if it doesn't.
  * Returns the folder ID.
  */
-export async function createFolder(folderName: string, parentId: string): Promise<string> {
+export async function createFolder(
+  folderName: string,
+  parentId: string,
+): Promise<string> {
   const drive = initDrive();
 
   // Search for existing folder
   const query = `mimeType = 'application/vnd.google-apps.folder' and name = '${folderName}' and '${parentId}' in parents and trashed = false`;
-  const listRes = await drive.files.list(getListParams(query, 'files(id, name)'));
+  const listRes = await drive.files.list(
+    getListParams(query, "files(id, name)"),
+  );
 
   const files = listRes.data.files;
   if (files && files.length > 0) {
@@ -126,10 +133,10 @@ export async function createFolder(folderName: string, parentId: string): Promis
     supportsAllDrives: true,
     requestBody: {
       name: folderName,
-      mimeType: 'application/vnd.google-apps.folder',
+      mimeType: "application/vnd.google-apps.folder",
       parents: [parentId],
     },
-    fields: 'id',
+    fields: "id",
   });
 
   return folder.data.id!;
@@ -145,7 +152,7 @@ export async function readFile(fileName: string): Promise<any> {
 
   // Search for the file
   const query = `name = '${fileName}' and '${rootFolderId}' in parents and trashed = false`;
-  const listRes = await drive.files.list(getListParams(query, 'files(id)'));
+  const listRes = await drive.files.list(getListParams(query, "files(id)"));
 
   const files = listRes.data.files;
   if (!files || files.length === 0) {
@@ -158,14 +165,14 @@ export async function readFile(fileName: string): Promise<any> {
   const fileRes = await drive.files.get(
     {
       fileId: fileId,
-      alt: 'media',
+      alt: "media",
       supportsAllDrives: true,
     },
-    { responseType: 'text' }
+    { responseType: "text" },
   );
 
   const data = fileRes.data;
-  if (typeof data === 'string') {
+  if (typeof data === "string") {
     try {
       return JSON.parse(data);
     } catch {
@@ -183,7 +190,7 @@ export async function readFile(fileName: string): Promise<any> {
 export async function writeFile(
   folderName: string | null,
   fileName: string,
-  content: any
+  content: any,
 ): Promise<string> {
   const drive = initDrive();
   const rootFolderId = await getRootFolderId(drive);
@@ -195,13 +202,14 @@ export async function writeFile(
 
   // Search for existing file
   const query = `name = '${fileName}' and '${targetFolderId}' in parents and trashed = false`;
-  const listRes = await drive.files.list(getListParams(query, 'files(id)'));
+  const listRes = await drive.files.list(getListParams(query, "files(id)"));
 
   const files = listRes.data.files;
-  const bodyString = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+  const bodyString =
+    typeof content === "string" ? content : JSON.stringify(content, null, 2);
 
   const media = {
-    mimeType: 'application/json',
+    mimeType: "application/json",
     body: bodyString,
   };
 
@@ -212,7 +220,7 @@ export async function writeFile(
       fileId: fileId,
       supportsAllDrives: true,
       media: media,
-      fields: 'id',
+      fields: "id",
     });
     return updateRes.data.id!;
   } else {
@@ -222,10 +230,10 @@ export async function writeFile(
       requestBody: {
         name: fileName,
         parents: [targetFolderId],
-        mimeType: 'application/json',
+        mimeType: "application/json",
       },
       media: media,
-      fields: 'id',
+      fields: "id",
     });
     return createRes.data.id!;
   }
@@ -240,7 +248,7 @@ export async function readFileAtPath(filePath: string): Promise<any> {
   const rootFolderId = await getRootFolderId(drive);
 
   // Normalize path (split and filter empty strings)
-  const parts = filePath.split('/').filter((p) => p.length > 0);
+  const parts = filePath.split("/").filter((p) => p.length > 0);
   let currentParentId = rootFolderId;
 
   // Traverse the folder path
@@ -248,7 +256,7 @@ export async function readFileAtPath(filePath: string): Promise<any> {
     const part = parts[i];
     const isLast = i === parts.length - 1;
 
-    let query = '';
+    let query = "";
     if (isLast) {
       // Find the file
       query = `name = '${part}' and '${currentParentId}' in parents and trashed = false`;
@@ -257,7 +265,7 @@ export async function readFileAtPath(filePath: string): Promise<any> {
       query = `mimeType = 'application/vnd.google-apps.folder' and name = '${part}' and '${currentParentId}' in parents and trashed = false`;
     }
 
-    const listRes = await drive.files.list(getListParams(query, 'files(id)'));
+    const listRes = await drive.files.list(getListParams(query, "files(id)"));
     const files = listRes.data.files;
     if (!files || files.length === 0) {
       return null;
@@ -269,14 +277,14 @@ export async function readFileAtPath(filePath: string): Promise<any> {
   const fileRes = await drive.files.get(
     {
       fileId: currentParentId,
-      alt: 'media',
+      alt: "media",
       supportsAllDrives: true,
     },
-    { responseType: 'text' }
+    { responseType: "text" },
   );
 
   const data = fileRes.data;
-  if (typeof data === 'string') {
+  if (typeof data === "string") {
     try {
       return JSON.parse(data);
     } catch {
@@ -285,4 +293,3 @@ export async function readFileAtPath(filePath: string): Promise<any> {
   }
   return data;
 }
-

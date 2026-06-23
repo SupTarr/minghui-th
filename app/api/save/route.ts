@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server';
-import { readFile, writeFile } from '@/lib/gdrive';
-import { isAuthorized } from '@/lib/auth';
+import { NextResponse } from "next/server";
+import { readFile, writeFile } from "@/lib/gdrive";
+import { isAuthorized } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
     if (!(await isAuthorized(req))) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const article = await req.json();
@@ -13,8 +13,8 @@ export async function POST(req: Request) {
 
     if (!url || !title_en || !title_th || !content_en || !content_th || !date) {
       return NextResponse.json(
-        { error: 'Missing required article fields in request body' },
-        { status: 400 }
+        { error: "Missing required article fields in request body" },
+        { status: 400 },
       );
     }
 
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     if (!idMatch) {
       return NextResponse.json(
         { error: `Could not parse article ID from URL: ${url}` },
-        { status: 400 }
+        { status: 400 },
       );
     }
     const articleId = idMatch[1];
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       title_th,
       content_en,
       content_th,
-      category: 'Cultivation Insights',
+      category: "Cultivation Insights",
       published_date: date,
       fetched_at: new Date().toISOString(),
     };
@@ -49,12 +49,15 @@ export async function POST(req: Request) {
     // 4. Update index.json in the root folder
     let indexData = [];
     try {
-      const driveIndex = await readFile('index.json');
+      const driveIndex = await readFile("index.json");
       if (driveIndex && Array.isArray(driveIndex)) {
         indexData = driveIndex;
       }
     } catch (e) {
-      console.warn('Index file not found or corrupted, creating a new index:', e);
+      console.warn(
+        "Index file not found or corrupted, creating a new index:",
+        e,
+      );
     }
 
     const newEntry = {
@@ -74,17 +77,17 @@ export async function POST(req: Request) {
     }
 
     // Write updated index.json to root
-    await writeFile(null, 'index.json', indexData);
+    await writeFile(null, "index.json", indexData);
 
     return NextResponse.json({
       success: true,
       filePath: newEntry.filePath,
     });
   } catch (error: any) {
-    console.error('Error in /api/save:', error);
+    console.error("Error in /api/save:", error);
     return NextResponse.json(
-      { error: error.message || 'Internal Server Error' },
-      { status: 500 }
+      { error: error.message || "Internal Server Error" },
+      { status: 500 },
     );
   }
 }

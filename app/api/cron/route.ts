@@ -1,20 +1,20 @@
-import { NextResponse } from 'next/server';
-import { isAuthorized } from '@/lib/auth';
+import { NextResponse } from "next/server";
+import { isAuthorized } from "@/lib/auth";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 async function runPipeline(origin: string, incomingHeaders: Headers) {
   const headers: any = {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   };
-  const authHeader = incomingHeaders.get('Authorization');
-  const googleToken = incomingHeaders.get('X-Google-ID-Token');
-  if (authHeader) headers['Authorization'] = authHeader;
-  if (googleToken) headers['X-Google-ID-Token'] = googleToken;
+  const authHeader = incomingHeaders.get("Authorization");
+  const googleToken = incomingHeaders.get("X-Google-ID-Token");
+  if (authHeader) headers["Authorization"] = authHeader;
+  if (googleToken) headers["X-Google-ID-Token"] = googleToken;
 
   // 1. Trigger the scraper endpoint to find new articles
   const scrapeRes = await fetch(`${origin}/api/scrape`, {
-    method: 'POST',
+    method: "POST",
     headers,
   });
 
@@ -26,7 +26,9 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
   const articles = scrapeData.articles || [];
   const processed: Array<{ url: string; filePath: string }> = [];
 
-  console.log(`Cron pipeline found ${articles.length} new articles to process.`);
+  console.log(
+    `Cron pipeline found ${articles.length} new articles to process.`,
+  );
 
   // 2. Loop through each article and perform translate -> save
   for (const article of articles) {
@@ -35,7 +37,7 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
 
       // Call Translate API
       const translateRes = await fetch(`${origin}/api/translate`, {
-        method: 'POST',
+        method: "POST",
         headers,
         body: JSON.stringify({ url: article.url }),
       });
@@ -49,7 +51,7 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
 
       // Call Save API
       const saveRes = await fetch(`${origin}/api/save`, {
-        method: 'POST',
+        method: "POST",
         headers,
         body: JSON.stringify({
           url: article.url,
@@ -85,7 +87,7 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
 export async function GET(req: Request) {
   try {
     if (!(await isAuthorized(req))) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { origin } = new URL(req.url);
@@ -97,10 +99,10 @@ export async function GET(req: Request) {
       processed,
     });
   } catch (error: any) {
-    console.error('Cron pipeline exception:', error);
+    console.error("Cron pipeline exception:", error);
     return NextResponse.json(
-      { error: error.message || 'Internal Server Error' },
-      { status: 500 }
+      { error: error.message || "Internal Server Error" },
+      { status: 500 },
     );
   }
 }
@@ -108,7 +110,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     if (!(await isAuthorized(req))) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { origin } = new URL(req.url);
@@ -120,10 +122,10 @@ export async function POST(req: Request) {
       processed,
     });
   } catch (error: any) {
-    console.error('Cron pipeline exception:', error);
+    console.error("Cron pipeline exception:", error);
     return NextResponse.json(
-      { error: error.message || 'Internal Server Error' },
-      { status: 500 }
+      { error: error.message || "Internal Server Error" },
+      { status: 500 },
     );
   }
 }
