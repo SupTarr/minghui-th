@@ -897,7 +897,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* LEFT COLUMN: ARCHIVE LEDGER */}
-          <section className="lg:col-span-4 flex flex-col space-y-4 lg:sticky lg:top-24 h-auto lg:h-[calc(100vh-140px)] min-h-[500px]">
+          <section className="lg:col-span-5 flex flex-col space-y-4 lg:sticky lg:top-24 h-auto lg:h-[calc(100vh-140px)] min-h-[500px]">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">คลังบทความ</h2>
@@ -990,7 +990,7 @@ export default function Dashboard() {
           </section>
 
           {/* MIDDLE COLUMN: WORKSPACE CONSOLE */}
-          <section className="lg:col-span-5 space-y-6">
+          <section className="lg:col-span-4 space-y-6">
             <div>
               <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">แผงคอนโซลควบคุม</h2>
               <p className="text-3xs text-slate-500 font-sans mt-0.5">Workspace Operations & Execution Logs</p>
