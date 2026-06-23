@@ -53,9 +53,9 @@ export async function POST(req: Request) {
     // 3. Write individual article JSON to Drive folder
     await writeFile(folderName, fileName, articlePayload);
 
-    // 4. Return the catalog entry. The index.json is no longer rewritten here
-    // (once per article); the caller accumulates these entries and flushes them
-    // to /api/index in a single merge-write at the end of the sync run.
+    // 4. Return the catalog entry. The index.json isn't written here; the caller
+    // posts this entry to /api/index right after the save succeeds, so each
+    // article lands in its per-day index as soon as it's translated.
     const entry = {
       url,
       title_en,

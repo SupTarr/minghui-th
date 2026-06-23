@@ -358,10 +358,6 @@ export default function Dashboard() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    // Catalog entries saved this run, flushed to index.json once at the end
-    // (instead of rewriting the whole index per article).
-    const syncedEntries: Article[] = [];
-
     try {
       addLog("กำลังเริ่มตรวจสอบบทความใหม่จาก en.minghui.org...");
       setStatusMessage("กำลังตรวจหาบทความใหม่...");
@@ -505,9 +501,38 @@ export default function Dashboard() {
           filePath: saveData.filePath,
         };
 
-        syncedEntries.push(syncedArticle);
         setNewlySynced((prev) => [syncedArticle, ...prev]);
         setArchivedArticles((prev) => [syncedArticle, ...prev]);
+
+        // Write this article's entry to its per-day index.json immediately,
+        // right after the save succeeds (the index points at the saved file).
+        // Writing per article instead of one batch at the end means a cancel or
+        // crash mid-run leaves every already-translated article indexed. A
+        // failed index write only costs a re-translation next sync (dedup
+        // self-heals), so we warn and keep going.
+        try {
+          const indexRes = await fetch("/api/index", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Google-ID-Token": googleIdToken || "",
+            },
+            body: JSON.stringify({ entries: [syncedArticle] }),
+            signal: controller.signal,
+          });
+          if (!indexRes.ok) {
+            throw new Error(`Status ${indexRes.status}`);
+          }
+          addLog("🗂️ อัปเดตดัชนีคลังบทความแล้ว");
+        } catch (e) {
+          if (isCancelledRef.current) {
+            throw new DOMException("Aborted by user", "AbortError");
+          }
+          const msg = e instanceof Error ? e.message : String(e);
+          addLog(
+            `⚠️ อัปเดตดัชนีคลังล้มเหลว (${msg}) — บทความถูกบันทึกแล้ว ระบบจะเพิ่มลงดัชนีอัตโนมัติในการซิงค์ครั้งถัดไป`,
+          );
+        }
 
         setProgressPercent(Math.round(currentBaseProgress + stepWeight));
 
@@ -554,32 +579,6 @@ export default function Dashboard() {
         }
       }
     } finally {
-      // Persist all articles saved this run to the catalog in one merge-write,
-      // even if the run was cancelled or errored partway through.
-      if (syncedEntries.length > 0) {
-        try {
-          addLog("กำลังบันทึกดัชนีคลังบทความ...");
-          const indexRes = await fetch("/api/index", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Google-ID-Token": googleIdToken || "",
-            },
-            body: JSON.stringify({ entries: syncedEntries }),
-          });
-          if (!indexRes.ok) {
-            throw new Error(`Status ${indexRes.status}`);
-          }
-          addLog(
-            `🗂️ อัปเดตดัชนีคลังบทความสำเร็จ (${syncedEntries.length} รายการ)`,
-          );
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          addLog(
-            `⚠️ อัปเดตดัชนีคลังล้มเหลว (${msg}) — บทความถูกบันทึกแล้ว ระบบจะเพิ่มลงดัชนีอัตโนมัติในการซิงค์ครั้งถัดไป`,
-          );
-        }
-      }
       setIsSyncing(false);
       setIsCancelling(false);
       abortControllerRef.current = null;
