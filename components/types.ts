@@ -3,6 +3,7 @@ export interface Article {
   title_en: string;
   title_th: string;
   date: string;
+  category?: string;
   filePath?: string;
 }
 

@@ -140,9 +140,16 @@ export default function ArchiveList({
                   className="p-4 rounded-xl bg-[#0c1220]/30 border border-slate-900 hover:border-teal-500/30 hover:bg-[#0c1220]/60 transition-all duration-300 group cursor-pointer shadow-xs active:scale-[0.99] animate-fade-in"
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-3xs font-mono bg-slate-900/80 px-2 py-0.5 rounded text-slate-450 border border-slate-850">
-                      {article.date}
-                    </span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-3xs font-mono bg-slate-900/80 px-2 py-0.5 rounded text-slate-450 border border-slate-850 shrink-0">
+                        {article.date}
+                      </span>
+                      {article.category && (
+                        <span className="text-3xs font-sans px-2 py-0.5 rounded bg-teal-500/10 text-teal-400/90 border border-teal-500/15 truncate">
+                          {article.category}
+                        </span>
+                      )}
+                    </div>
                     <svg
                       className="w-3.5 h-3.5 text-slate-600 group-hover:text-teal-400 transition-colors"
                       fill="none"
