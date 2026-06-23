@@ -25,13 +25,6 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
   const scrapeData = await scrapeRes.json();
   const articles = scrapeData.articles || [];
   const processed: Array<{ url: string; filePath: string }> = [];
-  const entries: Array<{
-    url: string;
-    title_en: string;
-    title_th: string;
-    date: string;
-    filePath: string;
-  }> = [];
 
   console.log(
     `Cron pipeline found ${articles.length} new articles to process.`,
@@ -80,30 +73,34 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
         url: article.url,
         filePath: saveResult.filePath,
       });
+
+      // Write this article's entry to its per-day index.json right after it's
+      // saved (never before — the index points at the saved file). Writing per
+      // article instead of one batch at the end means a crash mid-run leaves
+      // every already-translated article indexed, so dedup skips it next run.
+      // A failed index write only costs a re-translation next run (the dedup
+      // self-heals), so isolate the error and keep going.
       if (saveResult.entry) {
-        entries.push(saveResult.entry);
+        try {
+          const indexRes = await fetch(`${origin}/api/index`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ entries: [saveResult.entry] }),
+          });
+          if (!indexRes.ok) {
+            console.error(
+              `Index update failed for ${article.url}: status ${indexRes.status}`,
+            );
+          }
+        } catch (indexError) {
+          console.error(`Index update threw for ${article.url}:`, indexError);
+        }
       }
 
       // Rate limit Gemini calls: add 1s delay between articles to avoid quota errors
       await new Promise((resolve) => setTimeout(resolve, 1000));
     } catch (articleError) {
       console.error(`Error processing article ${article.url}:`, articleError);
-    }
-  }
-
-  // Flush all new catalog entries to index.json in a single merge-write.
-  if (entries.length > 0) {
-    try {
-      const indexRes = await fetch(`${origin}/api/index`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ entries }),
-      });
-      if (!indexRes.ok) {
-        console.error(`Index flush failed with status ${indexRes.status}`);
-      }
-    } catch (indexError) {
-      console.error("Index flush threw:", indexError);
     }
   }
 
