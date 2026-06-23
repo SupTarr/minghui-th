@@ -1,14 +1,21 @@
 import { NextResponse } from 'next/server';
+import { isAuthorized } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-async function runPipeline(origin: string) {
+async function runPipeline(origin: string, incomingHeaders: Headers) {
+  const headers: any = {
+    'Content-Type': 'application/json',
+  };
+  const authHeader = incomingHeaders.get('Authorization');
+  const googleToken = incomingHeaders.get('X-Google-ID-Token');
+  if (authHeader) headers['Authorization'] = authHeader;
+  if (googleToken) headers['X-Google-ID-Token'] = googleToken;
+
   // 1. Trigger the scraper endpoint to find new articles
   const scrapeRes = await fetch(`${origin}/api/scrape`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
   });
 
   if (!scrapeRes.ok) {
@@ -29,9 +36,7 @@ async function runPipeline(origin: string) {
       // Call Translate API
       const translateRes = await fetch(`${origin}/api/translate`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ url: article.url }),
       });
 
@@ -45,9 +50,7 @@ async function runPipeline(origin: string) {
       // Call Save API
       const saveRes = await fetch(`${origin}/api/save`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           url: article.url,
           title_en: translation.title_en,
@@ -81,8 +84,12 @@ async function runPipeline(origin: string) {
 
 export async function GET(req: Request) {
   try {
+    if (!(await isAuthorized(req))) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { origin } = new URL(req.url);
-    const processed = await runPipeline(origin);
+    const processed = await runPipeline(origin, req.headers);
 
     return NextResponse.json({
       success: true,
@@ -100,8 +107,12 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    if (!(await isAuthorized(req))) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { origin } = new URL(req.url);
-    const processed = await runPipeline(origin);
+    const processed = await runPipeline(origin, req.headers);
 
     return NextResponse.json({
       success: true,

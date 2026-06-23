@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import { readFile, writeFile } from '@/lib/gdrive';
+import { isAuthorized } from '@/lib/auth';
 
 export async function POST(req: Request) {
   try {
+    if (!(await isAuthorized(req))) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const article = await req.json();
     const { url, title_en, title_th, content_en, content_th, date } = article;
 

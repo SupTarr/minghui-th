@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
 import { readFile } from '@/lib/gdrive';
+import { isAuthorized } from '@/lib/auth';
 
 // Mark route as dynamic to ensure it doesn't get cached at build time
 export const dynamic = 'force-dynamic';
@@ -54,8 +55,11 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    if (!(await isAuthorized(req))) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     // 1. Fetch category cultivation insights
     const targetUrl = 'https://en.minghui.org/cc/26/';
     const response = await fetch(targetUrl, {
