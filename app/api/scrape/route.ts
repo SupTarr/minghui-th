@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
-import { readFile } from "@/lib/gdrive";
-import { isAuthorized } from "@/lib/auth";
+import { readDayIndex } from "@/lib/gdrive";
+import { authorize } from "@/lib/auth";
 
 // Mark route as dynamic to ensure it doesn't get cached at build time
 export const dynamic = "force-dynamic";
@@ -36,32 +36,14 @@ function parseDateText(dateStr: string): string {
   return dateStr;
 }
 
-export async function GET() {
-  try {
-    let indexData = [];
-    try {
-      const driveIndex = await readFile("index.json");
-      if (driveIndex && Array.isArray(driveIndex)) {
-        indexData = driveIndex;
-      }
-    } catch (e) {
-      console.warn("Could not read index.json in GET handler:", e);
-    }
-    return NextResponse.json({ articles: indexData });
-  } catch (error) {
-    const err = error as Error;
-    console.error("Error in GET /api/scrape:", err);
-    return NextResponse.json(
-      { error: err.message || "Internal Server Error" },
-      { status: 500 },
-    );
-  }
-}
-
 export async function POST(req: Request) {
   try {
-    if (!(await isAuthorized(req))) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await authorize(req);
+    if (!auth.authorized) {
+      return NextResponse.json(
+        { error: "Unauthorized", reason: auth.reason },
+        { status: auth.status },
+      );
     }
     // 1. Fetch category cultivation insights
     const targetUrl = "https://en.minghui.org/cc/26/";
@@ -110,22 +92,20 @@ export async function POST(req: Request) {
       }
     });
 
-    // 2. Load index.json from Drive to filter out already-fetched articles
-    let indexData = [];
-    try {
-      const driveIndex = await readFile("index.json");
-      if (driveIndex && Array.isArray(driveIndex)) {
-        indexData = driveIndex;
-      }
-    } catch (e) {
-      console.warn(
-        "Could not read index.json from Drive, starting with fresh array:",
-        e,
-      );
-    }
-
-    const existingUrls = new Set(
-      indexData.map((item: { url: string }) => item.url),
+    // 2. Dedup against already-fetched articles. Scraped articles are recent and
+    // date-partitioned, so we only read the per-day indexes for the dates present
+    // in this batch (a small, bounded set) instead of a global catalog.
+    const dates = [...new Set(articles.map((a) => a.date).filter(Boolean))];
+    const existingUrls = new Set<string>();
+    await Promise.all(
+      dates.map(async (date) => {
+        try {
+          const dayIndex = await readDayIndex(date);
+          for (const entry of dayIndex) existingUrls.add(entry.url);
+        } catch (e) {
+          console.warn(`Could not read day index for ${date}:`, e);
+        }
+      }),
     );
 
     // Filter to only new articles

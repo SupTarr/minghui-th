@@ -212,7 +212,7 @@ export async function writeFile(
 
   const files = listRes.data.files;
   const bodyString =
-    typeof content === "string" ? content : JSON.stringify(content, null, 2);
+    typeof content === "string" ? content : JSON.stringify(content);
 
   const media = {
     mimeType: "application/json",
@@ -298,4 +298,42 @@ export async function readFileAtPath(filePath: string): Promise<unknown> {
     }
   }
   return data;
+}
+
+/**
+ * A single article's entry in the lightweight catalog (per-day index).
+ */
+export interface CatalogEntry {
+  url: string;
+  title_en: string;
+  title_th: string;
+  date: string;
+  filePath: string;
+}
+
+/**
+ * Reads the per-day catalog index at `/{date}/index.json`.
+ *
+ * Returns [] when the day has no index yet (legitimate — the day is empty or
+ * not synced). Throws if the file exists but is not a JSON array, so callers can
+ * abort instead of overwriting a corrupted index with partial data.
+ */
+export async function readDayIndex(date: string): Promise<CatalogEntry[]> {
+  const data = await readFileAtPath(`/${date}/index.json`);
+  if (data === null) return [];
+  if (Array.isArray(data)) return data as CatalogEntry[];
+  throw new Error(
+    `Day index ${date}/index.json exists but is not a JSON array; aborting`,
+  );
+}
+
+/**
+ * Writes the per-day catalog index at `/{date}/index.json`, creating the date
+ * folder if needed.
+ */
+export async function writeDayIndex(
+  date: string,
+  entries: CatalogEntry[],
+): Promise<void> {
+  await writeFile(date, "index.json", entries);
 }

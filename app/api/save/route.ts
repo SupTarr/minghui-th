@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
-import { readFile, writeFile } from "@/lib/gdrive";
-import { isAuthorized } from "@/lib/auth";
+import { writeFile } from "@/lib/gdrive";
+import { authorize } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
-    if (!(await isAuthorized(req))) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await authorize(req);
+    if (!auth.authorized) {
+      return NextResponse.json(
+        { error: "Unauthorized", reason: auth.reason },
+        { status: auth.status },
+      );
     }
 
     const article = await req.json();
@@ -46,28 +50,10 @@ export async function POST(req: Request) {
     // 3. Write individual article JSON to Drive folder
     await writeFile(folderName, fileName, articlePayload);
 
-    // 4. Update index.json in the root folder
-    interface IndexEntry {
-      url: string;
-      title_en: string;
-      title_th: string;
-      date: string;
-      filePath: string;
-    }
-    let indexData: IndexEntry[] = [];
-    try {
-      const driveIndex = await readFile("index.json");
-      if (driveIndex && Array.isArray(driveIndex)) {
-        indexData = driveIndex as IndexEntry[];
-      }
-    } catch (e) {
-      console.warn(
-        "Index file not found or corrupted, creating a new index:",
-        e,
-      );
-    }
-
-    const newEntry = {
+    // 4. Return the catalog entry. The index.json is no longer rewritten here
+    // (once per article); the caller accumulates these entries and flushes them
+    // to /api/index in a single merge-write at the end of the sync run.
+    const entry = {
       url,
       title_en,
       title_th,
@@ -75,20 +61,10 @@ export async function POST(req: Request) {
       filePath: `/${folderName}/${fileName}`,
     };
 
-    // Prevent duplicates by checking if the URL already exists
-    const existingIndex = indexData.findIndex((item) => item.url === url);
-    if (existingIndex > -1) {
-      indexData[existingIndex] = newEntry;
-    } else {
-      indexData.push(newEntry);
-    }
-
-    // Write updated index.json to root
-    await writeFile(null, "index.json", indexData);
-
     return NextResponse.json({
       success: true,
-      filePath: newEntry.filePath,
+      filePath: entry.filePath,
+      entry,
     });
   } catch (error) {
     const err = error as Error;
