@@ -1,0 +1,183 @@
+"use client";
+
+import type { RefObject } from "react";
+import DateRangePicker from "@/components/DateRangePicker";
+import type { Article } from "@/components/types";
+
+interface ArchiveListProps {
+  startDate: string;
+  setStartDate: (date: string) => void;
+  endDate: string;
+  setEndDate: (date: string) => void;
+  activeTab: "archived" | "newly-synced";
+  setActiveTab: (tab: "archived" | "newly-synced") => void;
+  archivedArticles: Article[];
+  newlySynced: Article[];
+  listArticles: Article[];
+  visibleCount: number;
+  loadingInitial: boolean;
+  scrollContainerRef: RefObject<HTMLDivElement | null>;
+  loadMoreRef: RefObject<HTMLDivElement | null>;
+  openArticle: (path: string) => void;
+}
+
+export default function ArchiveList({
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate,
+  activeTab,
+  setActiveTab,
+  archivedArticles,
+  newlySynced,
+  listArticles,
+  visibleCount,
+  loadingInitial,
+  scrollContainerRef,
+  loadMoreRef,
+  openArticle,
+}: ArchiveListProps) {
+  return (
+    <section className="lg:col-span-6 flex flex-col space-y-4 lg:sticky lg:top-24 h-auto lg:h-[calc(100vh-140px)] min-h-[500px]">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">
+            คลังบทความ
+          </h2>
+          <p className="text-3xs text-slate-500 font-sans mt-0.5">
+            Archive Library & Index Ledger
+          </p>
+        </div>
+        <DateRangePicker
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+          align="left"
+          size="sm"
+        />
+      </div>
+
+      {/* Tab Toggles */}
+      <div className="flex bg-[#0c1220]/60 p-1 border border-slate-900 rounded-xl">
+        <button
+          onClick={() => setActiveTab("archived")}
+          className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+            activeTab === "archived"
+              ? "bg-[#14b8a6]/10 text-teal-400 font-bold border border-teal-500/15"
+              : "text-slate-455 hover:text-slate-200"
+          }`}
+        >
+          {startDate ? "ช่วงวันที่เลือก" : "7 วันล่าสุด"} (
+          {archivedArticles.length})
+        </button>
+        <button
+          onClick={() => setActiveTab("newly-synced")}
+          className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+            activeTab === "newly-synced"
+              ? "bg-[#14b8a6]/10 text-teal-400 font-bold border border-teal-500/15"
+              : "text-slate-455 hover:text-slate-200"
+          }`}
+        >
+          แปลรอบนี้ ({newlySynced.length})
+        </button>
+      </div>
+
+      {/* Scrollable list of articles */}
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto scrollbar-thin pr-1 space-y-3 pb-6"
+      >
+        {loadingInitial && activeTab === "archived" ? (
+          <div className="h-[250px] flex flex-col items-center justify-center text-slate-550 space-y-3">
+            <svg
+              className="animate-spin h-6 w-6 text-teal-500/70"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
+            </svg>
+            <span className="text-3xs uppercase tracking-wider text-slate-555 font-mono">
+              กำลังเชื่อมต่อข้อมูลคลัง...
+            </span>
+          </div>
+        ) : activeTab === "archived" && archivedArticles.length === 0 ? (
+          <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
+            <span className="text-xs font-sans">
+              {startDate
+                ? "ไม่พบบทความสำหรับช่วงวันที่ระบุ"
+                : "ไม่พบบทความในช่วง 7 วันล่าสุด — เลือกวันที่เพื่อดูย้อนหลัง"}
+            </span>
+          </div>
+        ) : activeTab === "newly-synced" && newlySynced.length === 0 ? (
+          <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
+            <span className="text-xs font-sans">
+              ยังไม่มีบทความที่ดึงใหม่ในเซสชันนี้
+            </span>
+          </div>
+        ) : (
+          <>
+            {listArticles
+              .slice(0, visibleCount)
+              .map((article: Article, idx: number) => (
+                <div
+                  key={article.filePath ?? article.url ?? idx}
+                  onClick={() =>
+                    article.filePath && openArticle(article.filePath)
+                  }
+                  className="p-4 rounded-xl bg-[#0c1220]/30 border border-slate-900 hover:border-teal-500/30 hover:bg-[#0c1220]/60 transition-all duration-300 group cursor-pointer shadow-xs active:scale-[0.99] animate-fade-in"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-3xs font-mono bg-slate-900/80 px-2 py-0.5 rounded text-slate-450 border border-slate-850">
+                      {article.date}
+                    </span>
+                    <svg
+                      className="w-3.5 h-3.5 text-slate-600 group-hover:text-teal-400 transition-colors"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+                      />
+                    </svg>
+                  </div>
+                  <h3 className="text-sm font-display font-bold text-slate-100 leading-relaxed group-hover:text-teal-400 transition-colors line-clamp-2">
+                    {article.title_th}
+                  </h3>
+                  <p className="text-3xs text-slate-500 font-sans line-clamp-1 mt-1.5 italic group-hover:text-slate-400 transition-colors">
+                    {article.title_en}
+                  </p>
+                </div>
+              ))}
+            {visibleCount < listArticles.length && (
+              <div
+                ref={loadMoreRef}
+                className="py-4 flex items-center justify-center"
+              >
+                <span className="text-3xs text-slate-550 font-mono uppercase tracking-wider">
+                  แสดงเพิ่มเติม ({visibleCount}/{listArticles.length})
+                </span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
