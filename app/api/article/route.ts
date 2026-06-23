@@ -36,8 +36,7 @@ export async function GET(req: Request) {
       // Content never changes after it's saved, so let the CDN hold it for a
       // long time and serve stale while revalidating.
       headers: {
-        "Cache-Control":
-          "public, s-maxage=3600, stale-while-revalidate=86400",
+        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
       },
     });
   } catch (error) {
