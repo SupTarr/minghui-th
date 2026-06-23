@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import DateRangePicker from "@/components/DateRangePicker";
 
 interface Article {
   url: string;
@@ -207,7 +208,21 @@ export default function Dashboard() {
   const [progressPercent, setProgressPercent] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
-  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  });
+  const [endDate, setEndDate] = useState<string>(() => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  });
 
   // Pagination for the archive list — render in chunks so a large catalog
   // (1000+ articles) doesn't mount thousands of card nodes at once.
@@ -225,7 +240,7 @@ export default function Dashboard() {
   // Reset paging whenever the view (tab or date filter) changes. Done during
   // render (not in an effect) per React's "adjusting state on prop change"
   // guidance, so it applies before paint without an extra commit.
-  const viewKey = `${activeTab}|${selectedDate}`;
+  const viewKey = `${activeTab}|${startDate}|${endDate}`;
   const [prevViewKey, setPrevViewKey] = useState(viewKey);
   if (viewKey !== prevViewKey) {
     setPrevViewKey(viewKey);
@@ -434,125 +449,6 @@ export default function Dashboard() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  // Custom Datepicker state and helper logic
-  const [viewDate, setViewDate] = useState<Date>(new Date());
-  const [showCalendar, setShowCalendar] = useState(false);
-  const calendarRef = useRef<HTMLDivElement>(null);
-
-  // Close calendar popover on click outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        calendarRef.current &&
-        !calendarRef.current.contains(event.target as Node)
-      ) {
-        setShowCalendar(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const monthNames = [
-    "มกราคม",
-    "กุมภาพันธ์",
-    "มีนาคม",
-    "เมษายน",
-    "พฤษภาคม",
-    "มิถุนายน",
-    "กรกฎาคม",
-    "สิงหาคม",
-    "กันยายน",
-    "ตุลาคม",
-    "พฤศจิกายน",
-    "ธันวาคม",
-  ];
-
-  const shortMonthNames = [
-    "ม.ค.",
-    "ก.พ.",
-    "มี.ค.",
-    "เม.ย.",
-    "พ.ค.",
-    "มิ.ย.",
-    "ก.ค.",
-    "ส.ค.",
-    "ก.ย.",
-    "ต.ค.",
-    "พ.ย.",
-    "ธ.ค.",
-  ];
-
-  const daysOfWeek = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
-
-  function formatDateToString(date: Date) {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const dd = String(date.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  function formatThaiDateShort(dateStr: string) {
-    if (!dateStr) return "ทั้งหมด (กรองตามวันที่)";
-    const [y, m, d] = dateStr.split("-");
-    const month = shortMonthNames[parseInt(m) - 1];
-    return `${parseInt(d)} ${month} ${y}`;
-  }
-
-  const getDaysInMonth = (year: number, month: number) =>
-    new Date(year, month + 1, 0).getDate();
-  const getFirstDayOfMonth = (year: number, month: number) =>
-    new Date(year, month, 1).getDay();
-
-  const generateCalendarDays = () => {
-    const year = viewDate.getFullYear();
-    const month = viewDate.getMonth();
-    const daysInMonth = getDaysInMonth(year, month);
-    const firstDayIndex = getFirstDayOfMonth(year, month);
-    const prevMonthDays = getDaysInMonth(year, month - 1);
-
-    const days: Array<{
-      day: number;
-      dateStr: string;
-      isCurrentMonth: boolean;
-    }> = [];
-
-    // Days from previous month
-    for (let i = firstDayIndex - 1; i >= 0; i--) {
-      const prevDay = prevMonthDays - i;
-      const prevDate = new Date(year, month - 1, prevDay);
-      days.push({
-        day: prevDay,
-        dateStr: formatDateToString(prevDate),
-        isCurrentMonth: false,
-      });
-    }
-
-    // Days from current month
-    for (let i = 1; i <= daysInMonth; i++) {
-      const currentDate = new Date(year, month, i);
-      days.push({
-        day: i,
-        dateStr: formatDateToString(currentDate),
-        isCurrentMonth: true,
-      });
-    }
-
-    // Days from next month (fill grid to 42 items)
-    const totalGridItems = 42;
-    const remainingDays = totalGridItems - days.length;
-    for (let i = 1; i <= remainingDays; i++) {
-      const nextDate = new Date(year, month + 1, i);
-      days.push({
-        day: i,
-        dateStr: formatDateToString(nextDate),
-        isCurrentMonth: false,
-      });
-    }
-
-    return days;
-  };
-
   // Parses markdown structures (headings, blockquotes, bullet lists, code blocks) and renders styled elements
   function renderContent(content: string, lang: "th" | "en") {
     return content.split("\n\n").map((para, idx) => {
@@ -664,7 +560,7 @@ export default function Dashboard() {
   // with a date, loads just that day. The catalog is date-partitioned, so the
   // server only reads the relevant per-day indexes (never the whole archive).
   const fetchArchivedArticles = useCallback(
-    async (date?: string) => {
+    async (start?: string, end?: string) => {
       try {
         setLoadingInitial(true);
         const fmt = (d: Date) =>
@@ -674,12 +570,13 @@ export default function Dashboard() {
 
         let from: string;
         let to: string;
-        if (date) {
-          from = to = date;
+        if (start) {
+          from = start;
+          to = end || start;
         } else {
           const today = new Date();
           const past = new Date();
-          past.setDate(today.getDate() - 6);
+          past.setDate(today.getDate() - 7);
           to = fmt(today);
           from = fmt(past);
         }
@@ -709,9 +606,9 @@ export default function Dashboard() {
   // Load the archive on mount and whenever the date filter changes.
   useEffect(() => {
     setTimeout(() => {
-      fetchArchivedArticles(selectedDate || undefined);
+      fetchArchivedArticles(startDate || undefined, endDate || undefined);
     }, 0);
-  }, [fetchArchivedArticles, selectedDate]);
+  }, [fetchArchivedArticles, startDate, endDate]);
 
   // Auto-scroll terminal logs to bottom
   useEffect(() => {
@@ -763,13 +660,15 @@ export default function Dashboard() {
       const scrapeData = await scrapeRes.json();
       let newArticles = scrapeData.articles || [];
 
-      // Filter by selected date if specified
-      if (selectedDate) {
+      // Filter by selected date range if specified
+      if (startDate) {
+        const end = endDate || startDate;
         newArticles = newArticles.filter(
-          (article: Article) => article.date === selectedDate,
+          (article: Article) =>
+            article.date >= startDate && article.date <= end,
         );
         addLog(
-          `กรองตามวันที่เลือก: ${selectedDate} (พบบทความใหม่ ${newArticles.length} รายการหลังจากกรอง)`,
+          `กรองตามช่วงวันที่เลือก: ${startDate} - ${end} (พบบทความใหม่ ${newArticles.length} รายการหลังจากกรอง)`,
         );
       }
 
@@ -941,7 +840,9 @@ export default function Dashboard() {
           if (!indexRes.ok) {
             throw new Error(`Status ${indexRes.status}`);
           }
-          addLog(`🗂️ อัปเดตดัชนีคลังบทความสำเร็จ (${syncedEntries.length} รายการ)`);
+          addLog(
+            `🗂️ อัปเดตดัชนีคลังบทความสำเร็จ (${syncedEntries.length} รายการ)`,
+          );
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           addLog(
@@ -1059,12 +960,14 @@ export default function Dashboard() {
                   Archive Library & Index Ledger
                 </p>
               </div>
-              {selectedDate && (
-                <span className="text-3xs font-mono bg-teal-500/10 text-teal-400 border border-teal-500/15 px-2.5 py-1 rounded-lg flex items-center gap-1.5 animate-fade-in">
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
-                  {formatThaiDateShort(selectedDate)}
-                </span>
-              )}
+              <DateRangePicker
+                startDate={startDate}
+                setStartDate={setStartDate}
+                endDate={endDate}
+                setEndDate={setEndDate}
+                align="left"
+                size="sm"
+              />
             </div>
 
             {/* Tab Toggles */}
@@ -1077,7 +980,7 @@ export default function Dashboard() {
                     : "text-slate-455 hover:text-slate-200"
                 }`}
               >
-                {selectedDate ? "วันที่เลือก" : "7 วันล่าสุด"} (
+                {startDate ? "ช่วงวันที่เลือก" : "7 วันล่าสุด"} (
                 {archivedArticles.length})
               </button>
               <button
@@ -1125,8 +1028,8 @@ export default function Dashboard() {
               ) : activeTab === "archived" && archivedArticles.length === 0 ? (
                 <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
                   <span className="text-xs font-sans">
-                    {selectedDate
-                      ? "ไม่พบบทความสำหรับวันที่ระบุ"
+                    {startDate
+                      ? "ไม่พบบทความสำหรับช่วงวันที่ระบุ"
                       : "ไม่พบบทความในช่วง 7 วันล่าสุด — เลือกวันที่เพื่อดูย้อนหลัง"}
                   </span>
                 </div>
@@ -1141,38 +1044,38 @@ export default function Dashboard() {
                   {listArticles
                     .slice(0, visibleCount)
                     .map((article: Article, idx: number) => (
-                  <div
-                    key={article.filePath ?? article.url ?? idx}
-                    onClick={() =>
-                      article.filePath && openArticle(article.filePath)
-                    }
-                    className="p-4 rounded-xl bg-[#0c1220]/30 border border-slate-900 hover:border-teal-500/30 hover:bg-[#0c1220]/60 transition-all duration-300 group cursor-pointer shadow-xs active:scale-[0.99] animate-fade-in"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-3xs font-mono bg-slate-900/80 px-2 py-0.5 rounded text-slate-450 border border-slate-850">
-                        {article.date}
-                      </span>
-                      <svg
-                        className="w-3.5 h-3.5 text-slate-600 group-hover:text-teal-400 transition-colors"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        viewBox="0 0 24 24"
+                      <div
+                        key={article.filePath ?? article.url ?? idx}
+                        onClick={() =>
+                          article.filePath && openArticle(article.filePath)
+                        }
+                        className="p-4 rounded-xl bg-[#0c1220]/30 border border-slate-900 hover:border-teal-500/30 hover:bg-[#0c1220]/60 transition-all duration-300 group cursor-pointer shadow-xs active:scale-[0.99] animate-fade-in"
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-                        />
-                      </svg>
-                    </div>
-                    <h3 className="text-sm font-display font-bold text-slate-100 leading-relaxed group-hover:text-teal-400 transition-colors line-clamp-2">
-                      {article.title_th}
-                    </h3>
-                    <p className="text-3xs text-slate-500 font-sans line-clamp-1 mt-1.5 italic group-hover:text-slate-400 transition-colors">
-                      {article.title_en}
-                    </p>
-                  </div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-3xs font-mono bg-slate-900/80 px-2 py-0.5 rounded text-slate-450 border border-slate-850">
+                            {article.date}
+                          </span>
+                          <svg
+                            className="w-3.5 h-3.5 text-slate-600 group-hover:text-teal-400 transition-colors"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+                            />
+                          </svg>
+                        </div>
+                        <h3 className="text-sm font-display font-bold text-slate-100 leading-relaxed group-hover:text-teal-400 transition-colors line-clamp-2">
+                          {article.title_th}
+                        </h3>
+                        <p className="text-3xs text-slate-500 font-sans line-clamp-1 mt-1.5 italic group-hover:text-slate-400 transition-colors">
+                          {article.title_en}
+                        </p>
+                      </div>
                     ))}
                   {visibleCount < listArticles.length && (
                     <div
@@ -1210,7 +1113,7 @@ export default function Dashboard() {
                   {archivedArticles.length}
                 </p>
                 <span className="text-4xs text-slate-550 font-sans mt-0.5 block leading-none">
-                  {selectedDate ? "ในวันที่เลือก" : "ใน 7 วันล่าสุด"}
+                  {startDate ? "ในช่วงที่เลือก" : "ใน 7 วันล่าสุด"}
                 </span>
               </div>
               <div className="p-3 rounded-xl bg-[#0c1220]/20 border border-slate-900 backdrop-blur-xs">
@@ -1314,195 +1217,19 @@ export default function Dashboard() {
               {/* Date Filter & Control Buttons */}
               <div className="w-full space-y-4">
                 {/* Calendar Trigger */}
-                <div className="space-y-1.5 relative w-full" ref={calendarRef}>
+                <div className="space-y-1.5 relative w-full">
                   <label className="block text-4xs font-bold text-slate-500 uppercase tracking-widest font-mono">
                     เลือกตัวกรองวันที่ดึงข้อมูล
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => !isSyncing && setShowCalendar(!showCalendar)}
+                  <DateRangePicker
+                    startDate={startDate}
+                    setStartDate={setStartDate}
+                    endDate={endDate}
+                    setEndDate={setEndDate}
                     disabled={isSyncing}
-                    className="w-full bg-[#060913] border border-slate-900 rounded-xl px-4 py-2.5 text-xs text-slate-350 hover:border-slate-800 focus:outline-none transition-all flex items-center justify-between group disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2">
-                      <svg
-                        className="w-3.5 h-3.5 text-slate-550 group-hover:text-teal-400 transition-colors"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                        />
-                      </svg>
-                      <span
-                        className={
-                          selectedDate
-                            ? "text-teal-400 font-semibold"
-                            : "text-slate-500 font-medium"
-                        }
-                      >
-                        {selectedDate
-                          ? formatThaiDateShort(selectedDate)
-                          : "ดึงทั้งหมด (ไม่มีกรอง)"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      {selectedDate && (
-                        <span
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedDate("");
-                          }}
-                          className="px-1.5 py-0.5 rounded-md hover:bg-slate-900 text-slate-500 hover:text-slate-350 text-4xs transition-colors"
-                        >
-                          ล้างค่า
-                        </span>
-                      )}
-                      <svg
-                        className={`w-3.5 h-3.5 text-slate-550 group-hover:text-slate-300 transition-transform duration-200 ${showCalendar ? "rotate-180" : ""}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2.5"
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
-                    </div>
-                  </button>
-
-                  {/* Calendar Popover */}
-                  {showCalendar && (
-                    <div className="absolute top-[105%] right-0 w-[280px] bg-[#0c1220]/95 border border-slate-900 rounded-2xl p-4 shadow-2xl backdrop-blur-lg z-30 animate-fade-in flex flex-col space-y-4">
-                      <div className="flex justify-between items-center">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setViewDate(
-                              new Date(
-                                viewDate.getFullYear(),
-                                viewDate.getMonth() - 1,
-                                1,
-                              ),
-                            )
-                          }
-                          className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-450 hover:text-slate-200 transition-colors cursor-pointer"
-                        >
-                          <svg
-                            className="w-3.5 h-3.5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2.5"
-                              d="M15 19l-7-7 7-7"
-                            />
-                          </svg>
-                        </button>
-                        <span className="text-xs font-semibold text-slate-200 font-sans">
-                          {monthNames[viewDate.getMonth()]}{" "}
-                          {viewDate.getFullYear()}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setViewDate(
-                              new Date(
-                                viewDate.getFullYear(),
-                                viewDate.getMonth() + 1,
-                                1,
-                              ),
-                            )
-                          }
-                          className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-450 hover:text-slate-200 transition-colors cursor-pointer"
-                        >
-                          <svg
-                            className="w-3.5 h-3.5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2.5"
-                              d="M9 5l7 7-7 7"
-                            />
-                          </svg>
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-7 gap-1 text-center text-4xs font-semibold text-slate-505 uppercase tracking-widest font-mono">
-                        {daysOfWeek.map((day) => (
-                          <div key={day}>{day}</div>
-                        ))}
-                      </div>
-
-                      <div className="grid grid-cols-7 gap-1">
-                        {/* Calendar Grid Days */}
-                        {generateCalendarDays().map((item, idx) => {
-                          const isSel = selectedDate === item.dateStr;
-                          const isTod =
-                            formatDateToString(new Date()) === item.dateStr;
-                          return (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => {
-                                setSelectedDate(item.dateStr);
-                                setShowCalendar(false);
-                              }}
-                              className={`py-1 text-3xs rounded-md transition-colors cursor-pointer ${
-                                !item.isCurrentMonth
-                                  ? "text-slate-700 hover:bg-[#060913]"
-                                  : isSel
-                                    ? "bg-teal-500 text-slate-950 font-bold"
-                                    : isTod
-                                      ? "bg-[#060913] text-teal-400 border border-teal-500/20"
-                                      : "text-slate-350 hover:bg-[#060913]"
-                              }`}
-                            >
-                              {item.day}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div className="border-t border-slate-900 pt-3 flex justify-between items-center text-4xs font-semibold">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedDate(formatDateToString(new Date()));
-                            setShowCalendar(false);
-                          }}
-                          className="text-teal-400 hover:text-teal-350 transition-colors cursor-pointer"
-                        >
-                          วันนี้
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedDate("");
-                            setShowCalendar(false);
-                          }}
-                          className="text-slate-500 hover:text-slate-350 transition-colors cursor-pointer"
-                        >
-                          ล้างตัวกรอง
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                    align="right"
+                    size="md"
+                  />
                 </div>
 
                 {/* Authentication sync action buttons */}
