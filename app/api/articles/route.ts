@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
-import { readDayIndex, ARCHIVE_LIST_TAG, type CatalogEntry } from "@/lib/gdrive";
+import {
+  readDayIndex,
+  ARCHIVE_LIST_TAG,
+  type CatalogEntry,
+} from "@/lib/gdrive";
 
 export const dynamic = "force-dynamic";
 
@@ -88,8 +92,7 @@ export async function GET(req: Request) {
         // can't be purged by revalidateTag, so a sync's new articles surface
         // within ~60s on reload (the owner's session shows them immediately).
         headers: {
-          "Cache-Control":
-            "public, s-maxage=60, stale-while-revalidate=300",
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
         },
       },
     );
