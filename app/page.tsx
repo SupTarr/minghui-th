@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 interface Article {
   url: string;
@@ -208,6 +208,45 @@ export default function Dashboard() {
   const [logs, setLogs] = useState<string[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string>("");
+
+  // Pagination for the archive list — render in chunks so a large catalog
+  // (1000+ articles) doesn't mount thousands of card nodes at once.
+  const PAGE_SIZE = 60;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  const listArticles = useMemo(() => {
+    // The archive list is already date-scoped by the server fetch, so the
+    // "archived" tab renders it as-is; the other tab is this session's results.
+    return activeTab === "newly-synced" ? newlySynced : archivedArticles;
+  }, [activeTab, archivedArticles, newlySynced]);
+
+  // Reset paging whenever the view (tab or date filter) changes. Done during
+  // render (not in an effect) per React's "adjusting state on prop change"
+  // guidance, so it applies before paint without an extra commit.
+  const viewKey = `${activeTab}|${selectedDate}`;
+  const [prevViewKey, setPrevViewKey] = useState(viewKey);
+  if (viewKey !== prevViewKey) {
+    setPrevViewKey(viewKey);
+    setVisibleCount(PAGE_SIZE);
+  }
+
+  // Reveal the next chunk as the sentinel scrolls into view
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((c) => (c < listArticles.length ? c + PAGE_SIZE : c));
+        }
+      },
+      { root: scrollContainerRef.current, rootMargin: "300px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [listArticles.length, visibleCount]);
 
   const [readingArticlePath, setReadingArticlePath] = useState<string | null>(
     null,
@@ -621,35 +660,58 @@ export default function Dashboard() {
 
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  const fetchArchivedArticles = useCallback(async () => {
-    try {
-      setLoadingInitial(true);
-      const res = await fetch("/api/scrape");
-      if (res.ok) {
-        const data = await res.json();
-        // Sort by date descending
-        const sorted = (data.articles || []).sort(
-          (a: Article, b: Article) =>
-            new Date(b.date).getTime() - new Date(a.date).getTime(),
-        );
-        setArchivedArticles(sorted);
-      } else {
-        addLog("ระบบเกิดข้อผิดพลาดในการโหลดบทความที่บันทึกไว้");
-      }
-    } catch (e) {
-      console.error(e);
-      addLog("ไม่สามารถติดต่อเซิร์ฟเวอร์เพื่อโหลดบทความเก่าได้");
-    } finally {
-      setLoadingInitial(false);
-    }
-  }, [addLog]);
+  // Fetches the archive for a date range. With no date, loads the last 7 days;
+  // with a date, loads just that day. The catalog is date-partitioned, so the
+  // server only reads the relevant per-day indexes (never the whole archive).
+  const fetchArchivedArticles = useCallback(
+    async (date?: string) => {
+      try {
+        setLoadingInitial(true);
+        const fmt = (d: Date) =>
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+            d.getDate(),
+          ).padStart(2, "0")}`;
 
-  // Load already archived articles on mount
+        let from: string;
+        let to: string;
+        if (date) {
+          from = to = date;
+        } else {
+          const today = new Date();
+          const past = new Date();
+          past.setDate(today.getDate() - 6);
+          to = fmt(today);
+          from = fmt(past);
+        }
+
+        const res = await fetch(`/api/articles?from=${from}&to=${to}`);
+        if (res.ok) {
+          const data = await res.json();
+          // Sort by date descending
+          const sorted = (data.articles || []).sort(
+            (a: Article, b: Article) =>
+              new Date(b.date).getTime() - new Date(a.date).getTime(),
+          );
+          setArchivedArticles(sorted);
+        } else {
+          addLog("ระบบเกิดข้อผิดพลาดในการโหลดบทความที่บันทึกไว้");
+        }
+      } catch (e) {
+        console.error(e);
+        addLog("ไม่สามารถติดต่อเซิร์ฟเวอร์เพื่อโหลดบทความเก่าได้");
+      } finally {
+        setLoadingInitial(false);
+      }
+    },
+    [addLog],
+  );
+
+  // Load the archive on mount and whenever the date filter changes.
   useEffect(() => {
     setTimeout(() => {
-      fetchArchivedArticles();
+      fetchArchivedArticles(selectedDate || undefined);
     }, 0);
-  }, [fetchArchivedArticles]);
+  }, [fetchArchivedArticles, selectedDate]);
 
   // Auto-scroll terminal logs to bottom
   useEffect(() => {
@@ -670,6 +732,10 @@ export default function Dashboard() {
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
+
+    // Catalog entries saved this run, flushed to index.json once at the end
+    // (instead of rewriting the whole index per article).
+    const syncedEntries: Article[] = [];
 
     try {
       addLog("กำลังเริ่มตรวจสอบบทความใหม่จาก en.minghui.org...");
@@ -810,6 +876,7 @@ export default function Dashboard() {
           filePath: saveData.filePath,
         };
 
+        syncedEntries.push(syncedArticle);
         setNewlySynced((prev) => [syncedArticle, ...prev]);
         setArchivedArticles((prev) => [syncedArticle, ...prev]);
 
@@ -858,6 +925,30 @@ export default function Dashboard() {
         }
       }
     } finally {
+      // Persist all articles saved this run to the catalog in one merge-write,
+      // even if the run was cancelled or errored partway through.
+      if (syncedEntries.length > 0) {
+        try {
+          addLog("กำลังบันทึกดัชนีคลังบทความ...");
+          const indexRes = await fetch("/api/index", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Google-ID-Token": googleIdToken || "",
+            },
+            body: JSON.stringify({ entries: syncedEntries }),
+          });
+          if (!indexRes.ok) {
+            throw new Error(`Status ${indexRes.status}`);
+          }
+          addLog(`🗂️ อัปเดตดัชนีคลังบทความสำเร็จ (${syncedEntries.length} รายการ)`);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          addLog(
+            `⚠️ อัปเดตดัชนีคลังล้มเหลว (${msg}) — บทความถูกบันทึกแล้ว ระบบจะเพิ่มลงดัชนีอัตโนมัติในการซิงค์ครั้งถัดไป`,
+          );
+        }
+      }
       setIsSyncing(false);
       setIsCancelling(false);
       abortControllerRef.current = null;
@@ -917,9 +1008,6 @@ export default function Dashboard() {
                 </span>
               </div>
             )}
-            <span className="inline-flex items-center rounded-xl bg-slate-900/80 px-3 py-1.5 text-3xs font-mono font-medium text-slate-455 border border-slate-850">
-              SECURE DRIVE SYNC
-            </span>
           </div>
         </div>
       </header>
@@ -989,7 +1077,8 @@ export default function Dashboard() {
                     : "text-slate-455 hover:text-slate-200"
                 }`}
               >
-                ทั้งหมด ({archivedArticles.length})
+                {selectedDate ? "วันที่เลือก" : "7 วันล่าสุด"} (
+                {archivedArticles.length})
               </button>
               <button
                 onClick={() => setActiveTab("newly-synced")}
@@ -1004,7 +1093,10 @@ export default function Dashboard() {
             </div>
 
             {/* Scrollable list of articles */}
-            <div className="flex-1 overflow-y-auto scrollbar-thin pr-1 space-y-3 pb-6">
+            <div
+              ref={scrollContainerRef}
+              className="flex-1 overflow-y-auto scrollbar-thin pr-1 space-y-3 pb-6"
+            >
               {loadingInitial && activeTab === "archived" ? (
                 <div className="h-[250px] flex flex-col items-center justify-center text-slate-550 space-y-3">
                   <svg
@@ -1033,16 +1125,9 @@ export default function Dashboard() {
               ) : activeTab === "archived" && archivedArticles.length === 0 ? (
                 <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
                   <span className="text-xs font-sans">
-                    ไม่พบบทความใดๆ ในระบบคลังข้อมูล
-                  </span>
-                </div>
-              ) : activeTab === "archived" &&
-                selectedDate &&
-                archivedArticles.filter((a) => a.date === selectedDate)
-                  .length === 0 ? (
-                <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
-                  <span className="text-xs font-sans">
-                    ไม่พบบทความสำหรับวันที่ระบุ
+                    {selectedDate
+                      ? "ไม่พบบทความสำหรับวันที่ระบุ"
+                      : "ไม่พบบทความในช่วง 7 วันล่าสุด — เลือกวันที่เพื่อดูย้อนหลัง"}
                   </span>
                 </div>
               ) : activeTab === "newly-synced" && newlySynced.length === 0 ? (
@@ -1052,14 +1137,12 @@ export default function Dashboard() {
                   </span>
                 </div>
               ) : (
-                (activeTab === "archived"
-                  ? selectedDate
-                    ? archivedArticles.filter((a) => a.date === selectedDate)
-                    : archivedArticles
-                  : newlySynced
-                ).map((article: Article, idx: number) => (
+                <>
+                  {listArticles
+                    .slice(0, visibleCount)
+                    .map((article: Article, idx: number) => (
                   <div
-                    key={idx}
+                    key={article.filePath ?? article.url ?? idx}
                     onClick={() =>
                       article.filePath && openArticle(article.filePath)
                     }
@@ -1090,7 +1173,18 @@ export default function Dashboard() {
                       {article.title_en}
                     </p>
                   </div>
-                ))
+                    ))}
+                  {visibleCount < listArticles.length && (
+                    <div
+                      ref={loadMoreRef}
+                      className="py-4 flex items-center justify-center"
+                    >
+                      <span className="text-3xs text-slate-550 font-mono uppercase tracking-wider">
+                        แสดงเพิ่มเติม ({visibleCount}/{listArticles.length})
+                      </span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </section>
@@ -1116,7 +1210,7 @@ export default function Dashboard() {
                   {archivedArticles.length}
                 </p>
                 <span className="text-4xs text-slate-550 font-sans mt-0.5 block leading-none">
-                  ใน Drive Index
+                  {selectedDate ? "ในวันที่เลือก" : "ใน 7 วันล่าสุด"}
                 </span>
               </div>
               <div className="p-3 rounded-xl bg-[#0c1220]/20 border border-slate-900 backdrop-blur-xs">
