@@ -532,7 +532,7 @@ export default function Dashboard() {
         return (
           <blockquote
             key={idx}
-            className="border-l-2 border-amber-500/40 bg-[#0c1220]/25 px-6 py-4 my-6 rounded-r-xl italic text-slate-300 font-display text-sm sm:text-base leading-loose"
+            className="border-l-2 border-amber-500/40 bg-[#0c1220]/25 px-6 py-4 my-6 rounded-r-xl italic text-slate-300 font-sans text-sm sm:text-base leading-loose"
           >
             {para.replace(/^>\s+/, "")}
           </blockquote>
@@ -547,7 +547,7 @@ export default function Dashboard() {
               className={`text-sm sm:text-base ${
                 lang === "en" 
                   ? "text-slate-350 font-sans leading-relaxed" 
-                  : "text-slate-200 font-display leading-loose"
+                  : "text-slate-200 font-sans leading-loose"
               }`}
             >
               {para.replace(/^-\s+/, "")}
@@ -576,7 +576,7 @@ export default function Dashboard() {
           className={`indent-8 mb-5 text-sm sm:text-base ${
             lang === "en" 
               ? "text-slate-350 font-sans leading-relaxed" 
-              : "text-slate-100 font-display leading-loose"
+              : "text-slate-100 font-sans leading-loose"
           }`}
         >
           {para}
