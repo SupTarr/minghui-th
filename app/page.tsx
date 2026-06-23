@@ -680,10 +680,9 @@ export default function Dashboard() {
           err.message?.includes("403")
         ) {
           addLog(
-            "❌ การยืนยันสิทธิ์บัญชี Google ล้มเหลว หรือเซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่",
+            "❌ อีเมลนี้ไม่ได้รับสิทธิ์เข้าใช้งานระบบ หรือเซสชันหมดอายุ",
           );
-          setStatusMessage("สิทธิ์การเข้าถึงหมดอายุ/ไม่ถูกต้อง");
-          handleSignOut();
+          setStatusMessage("ไม่มีสิทธิ์เข้าใช้งานระบบ");
         } else {
           setStatusMessage("เกิดข้อผิดพลาดในการแปล/บันทึก");
           addLog(`❌ ข้อผิดพลาด: ${err.message || String(err)}`);
