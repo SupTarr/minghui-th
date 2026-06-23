@@ -47,11 +47,18 @@ export async function POST(req: Request) {
     await writeFile(folderName, fileName, articlePayload);
 
     // 4. Update index.json in the root folder
-    let indexData = [];
+    interface IndexEntry {
+      url: string;
+      title_en: string;
+      title_th: string;
+      date: string;
+      filePath: string;
+    }
+    let indexData: IndexEntry[] = [];
     try {
       const driveIndex = await readFile("index.json");
       if (driveIndex && Array.isArray(driveIndex)) {
-        indexData = driveIndex;
+        indexData = driveIndex as IndexEntry[];
       }
     } catch (e) {
       console.warn(
@@ -69,7 +76,7 @@ export async function POST(req: Request) {
     };
 
     // Prevent duplicates by checking if the URL already exists
-    const existingIndex = indexData.findIndex((item: any) => item.url === url);
+    const existingIndex = indexData.findIndex((item) => item.url === url);
     if (existingIndex > -1) {
       indexData[existingIndex] = newEntry;
     } else {
@@ -83,10 +90,11 @@ export async function POST(req: Request) {
       success: true,
       filePath: newEntry.filePath,
     });
-  } catch (error: any) {
-    console.error("Error in /api/save:", error);
+  } catch (error) {
+    const err = error as Error;
+    console.error("Error in /api/save:", err);
     return NextResponse.json(
-      { error: error.message || "Internal Server Error" },
+      { error: err.message || "Internal Server Error" },
       { status: 500 },
     );
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 interface Article {
   url: string;
@@ -8,6 +8,37 @@ interface Article {
   title_th: string;
   date: string;
   filePath?: string;
+}
+
+interface ArticleDetails {
+  published_date: string;
+  category: string;
+  url: string;
+  title_th: string;
+  title_en: string;
+  content_th: string;
+  content_en: string;
+}
+
+interface GoogleCredentialResponse {
+  credential?: string;
+}
+
+interface WindowWithGoogle extends Window {
+  google?: {
+    accounts: {
+      id: {
+        initialize: (config: {
+          client_id: string;
+          callback: (response: GoogleCredentialResponse) => void;
+        }) => void;
+        renderButton: (
+          element: HTMLElement,
+          options: { theme: string; size: string },
+        ) => void;
+      };
+    };
+  };
 }
 
 export default function Dashboard() {
@@ -27,7 +58,9 @@ export default function Dashboard() {
   const [readingArticlePath, setReadingArticlePath] = useState<string | null>(
     null,
   );
-  const [articleContent, setArticleContent] = useState<any | null>(null);
+  const [articleContent, setArticleContent] = useState<ArticleDetails | null>(
+    null,
+  );
   const [isLoadingArticle, setIsLoadingArticle] = useState(false);
   const [readerLanguage, setReaderLanguage] = useState<"th" | "en" | "both">(
     "th",
@@ -36,6 +69,15 @@ export default function Dashboard() {
   const isCancelledRef = useRef(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const addLog = useCallback((message: string) => {
+    const time = new Date().toLocaleTimeString("th-TH", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    setLogs((prev) => [...prev, `[${time}] ${message}`]);
+  }, []);
 
   function handleCancel() {
     isCancelledRef.current = true;
@@ -69,8 +111,9 @@ export default function Dashboard() {
   const [googleIdToken, setGoogleIdToken] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
-  function handleGoogleLoginResponse(response: any) {
+  function handleGoogleLoginResponse(response: GoogleCredentialResponse) {
     const idToken = response.credential;
+    if (!idToken) return;
     setGoogleIdToken(idToken);
 
     try {
@@ -95,8 +138,10 @@ export default function Dashboard() {
     const token = localStorage.getItem("google_id_token");
     const email = localStorage.getItem("google_user_email");
     if (token && email) {
-      setGoogleIdToken(token);
-      setUserEmail(email);
+      setTimeout(() => {
+        setGoogleIdToken(token);
+        setUserEmail(email);
+      }, 0);
     }
 
     fetch("/api/auth/config")
@@ -110,7 +155,7 @@ export default function Dashboard() {
           document.body.appendChild(script);
 
           script.onload = () => {
-            const google = (window as any).google;
+            const google = (window as unknown as WindowWithGoogle).google;
             if (google) {
               google.accounts.id.initialize({
                 client_id: data.clientId,
@@ -139,34 +184,7 @@ export default function Dashboard() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  // Fetch article content on path update
-  useEffect(() => {
-    if (readingArticlePath) {
-      loadArticleContent(readingArticlePath);
-    } else {
-      setArticleContent(null);
-    }
-  }, [readingArticlePath]);
-
-  // Synchronize readingArticlePath with URL on mount & handle browser back/forward buttons
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const articleParam = params.get("article");
-    if (articleParam) {
-      setReadingArticlePath(articleParam);
-    }
-
-    function handlePopState() {
-      const p = new URLSearchParams(window.location.search);
-      const art = p.get("article");
-      setReadingArticlePath(art || null);
-    }
-
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
-  async function loadArticleContent(path: string) {
+  const loadArticleContent = useCallback(async (path: string) => {
     try {
       setIsLoadingArticle(true);
       const res = await fetch(
@@ -184,7 +202,41 @@ export default function Dashboard() {
     } finally {
       setIsLoadingArticle(false);
     }
-  }
+  }, [addLog]);
+
+  // Fetch article content on path update
+  useEffect(() => {
+    if (readingArticlePath) {
+      const path = readingArticlePath;
+      setTimeout(() => {
+        loadArticleContent(path);
+      }, 0);
+    } else {
+      setTimeout(() => {
+        setArticleContent(null);
+      }, 0);
+    }
+  }, [readingArticlePath, loadArticleContent]);
+
+  // Synchronize readingArticlePath with URL on mount & handle browser back/forward buttons
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const articleParam = params.get("article");
+    if (articleParam) {
+      setTimeout(() => {
+        setReadingArticlePath(articleParam);
+      }, 0);
+    }
+
+    function handlePopState() {
+      const p = new URLSearchParams(window.location.search);
+      const art = p.get("article");
+      setReadingArticlePath(art || null);
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   // Custom Datepicker state and helper logic
   const [viewDate, setViewDate] = useState<Date>(new Date());
@@ -406,17 +458,7 @@ export default function Dashboard() {
 
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  // Load already archived articles on mount
-  useEffect(() => {
-    fetchArchivedArticles();
-  }, []);
-
-  // Auto-scroll terminal logs to bottom
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs]);
-
-  async function fetchArchivedArticles() {
+  const fetchArchivedArticles = useCallback(async () => {
     try {
       setLoadingInitial(true);
       const res = await fetch("/api/scrape");
@@ -437,16 +479,19 @@ export default function Dashboard() {
     } finally {
       setLoadingInitial(false);
     }
-  }
+  }, [addLog]);
 
-  function addLog(message: string) {
-    const time = new Date().toLocaleTimeString("th-TH", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-    setLogs((prev) => [...prev, `[${time}] ${message}`]);
-  }
+  // Load already archived articles on mount
+  useEffect(() => {
+    setTimeout(() => {
+      fetchArchivedArticles();
+    }, 0);
+  }, [fetchArchivedArticles]);
+
+  // Auto-scroll terminal logs to bottom
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
 
   async function handleSync() {
     if (isSyncing) return;
@@ -622,16 +667,17 @@ export default function Dashboard() {
       setStatusMessage("เสร็จสิ้นการซิงค์ข้อมูล!");
       setProgressPercent(100);
       addLog("🎉 กระบวนการแปลและบันทึกเสร็จสมบูรณ์แล้ว!");
-    } catch (error: any) {
-      if (error.name === "AbortError" || isCancelledRef.current) {
+    } catch (error) {
+      const err = error as Error;
+      if (err.name === "AbortError" || isCancelledRef.current) {
         addLog("🛑 กระบวนการถูกยกเลิกโดยผู้ใช้");
         setStatusMessage("ยกเลิกกระบวนการซิงค์เรียบร้อยแล้ว");
       } else {
-        console.error(error);
+        console.error(err);
         if (
-          error.message.includes("Unauthorized") ||
-          error.message.includes("401") ||
-          error.message.includes("403")
+          err.message?.includes("Unauthorized") ||
+          err.message?.includes("401") ||
+          err.message?.includes("403")
         ) {
           addLog(
             "❌ การยืนยันสิทธิ์บัญชี Google ล้มเหลว หรือเซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่",
@@ -640,7 +686,7 @@ export default function Dashboard() {
           handleSignOut();
         } else {
           setStatusMessage("เกิดข้อผิดพลาดในการแปล/บันทึก");
-          addLog(`❌ ข้อผิดพลาด: ${error.message || error}`);
+          addLog(`❌ ข้อผิดพลาด: ${err.message || String(err)}`);
         }
       }
     } finally {
@@ -660,11 +706,11 @@ export default function Dashboard() {
       <header className="border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-400 to-indigo-500 flex items-center justify-center shadow-lg shadow-teal-500/20">
+            <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-teal-400 to-indigo-500 flex items-center justify-center shadow-lg shadow-teal-500/20">
               <span className="font-bold text-slate-950 text-lg">M</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-teal-300 to-indigo-200 bg-clip-text text-transparent">
+              <h1 className="text-xl font-bold tracking-tight bg-linear-to-r from-teal-300 to-indigo-200 bg-clip-text text-transparent">
                 Minghui Scraper & Translator
               </h1>
               <p className="text-xs text-slate-400">
@@ -859,7 +905,7 @@ export default function Dashboard() {
                             !item.isCurrentMonth
                               ? "text-slate-700 hover:bg-slate-850 hover:text-slate-500"
                               : isSelected
-                                ? "bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 font-bold shadow-md shadow-teal-500/25 scale-105"
+                                ? "bg-linear-to-tr from-teal-500 to-emerald-400 text-slate-950 font-bold shadow-md shadow-teal-500/25 scale-105"
                                 : isToday
                                   ? "border border-teal-500/30 text-teal-400 hover:bg-slate-800"
                                   : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"
@@ -975,7 +1021,7 @@ export default function Dashboard() {
                 ) : (
                   <button
                     onClick={handleSync}
-                    className="w-full py-3.5 px-4 rounded-xl font-semibold shadow-lg transition-all duration-300 flex items-center justify-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 shadow-teal-500/10"
+                    className="w-full py-3.5 px-4 rounded-xl font-semibold shadow-lg transition-all duration-300 flex items-center justify-center gap-2 bg-linear-to-r from-teal-500 to-emerald-400 text-slate-950 hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 shadow-teal-500/10"
                   >
                     <svg
                       className="w-5 h-5"
@@ -1014,7 +1060,7 @@ export default function Dashboard() {
             <div className="p-4 flex-1 overflow-y-auto font-mono text-xs text-teal-400/90 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800">
               {logs.length === 0 ? (
                 <div className="text-slate-600 italic">
-                  กดปุ่ม "Fetch บทความใหม่" เพื่อเริ่มต้นทำกระบวนการ...
+                  กดปุ่ม &quot;Fetch บทความใหม่&quot; เพื่อเริ่มต้นทำกระบวนการ...
                 </div>
               ) : (
                 logs.map((log, idx) => (
@@ -1042,7 +1088,7 @@ export default function Dashboard() {
                 </div>
                 <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
                   <div
-                    className="bg-gradient-to-r from-teal-400 to-indigo-500 h-full transition-all duration-300"
+                    className="bg-linear-to-r from-teal-400 to-indigo-500 h-full transition-all duration-300"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
