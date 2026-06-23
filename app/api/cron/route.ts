@@ -1,22 +1,22 @@
 import { NextResponse } from "next/server";
 import { isAuthorized } from "@/lib/auth";
+import { POST as scrapePOST } from "@/app/api/scrape/route";
+import { POST as translatePOST } from "@/app/api/translate/route";
+import { POST as savePOST } from "@/app/api/save/route";
+import { POST as indexPOST } from "@/app/api/index/route";
 
 export const dynamic = "force-dynamic";
 
 async function runPipeline(origin: string, incomingHeaders: Headers) {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  const authHeader = incomingHeaders.get("Authorization");
-  const googleToken = incomingHeaders.get("X-Google-ID-Token");
-  if (authHeader) headers["Authorization"] = authHeader;
-  if (googleToken) headers["X-Google-ID-Token"] = googleToken;
+  const headers = new Headers(incomingHeaders);
+  headers.set("Content-Type", "application/json");
 
   // 1. Trigger the scraper endpoint to find new articles
-  const scrapeRes = await fetch(`${origin}/api/scrape`, {
+  const scrapeReq = new Request(`${origin}/api/scrape`, {
     method: "POST",
     headers,
   });
+  const scrapeRes = await scrapePOST(scrapeReq);
 
   if (!scrapeRes.ok) {
     throw new Error(`Scrape API failed with status ${scrapeRes.status}`);
@@ -36,11 +36,12 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
       console.log(`Processing article: ${article.title_en}`);
 
       // Call Translate API
-      const translateRes = await fetch(`${origin}/api/translate`, {
+      const translateReq = new Request(`${origin}/api/translate`, {
         method: "POST",
         headers,
         body: JSON.stringify({ url: article.url }),
       });
+      const translateRes = await translatePOST(translateReq);
 
       if (!translateRes.ok) {
         console.error(`Translation failed for: ${article.url}`);
@@ -50,7 +51,7 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
       const translation = await translateRes.json();
 
       // Call Save API
-      const saveRes = await fetch(`${origin}/api/save`, {
+      const saveReq = new Request(`${origin}/api/save`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -62,6 +63,7 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
           date: article.date,
         }),
       });
+      const saveRes = await savePOST(saveReq);
 
       if (!saveRes.ok) {
         console.error(`Save API failed for: ${article.url}`);
@@ -74,19 +76,14 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
         filePath: saveResult.filePath,
       });
 
-      // Write this article's entry to its per-day index.json right after it's
-      // saved (never before — the index points at the saved file). Writing per
-      // article instead of one batch at the end means a crash mid-run leaves
-      // every already-translated article indexed, so dedup skips it next run.
-      // A failed index write only costs a re-translation next run (the dedup
-      // self-heals), so isolate the error and keep going.
       if (saveResult.entry) {
         try {
-          const indexRes = await fetch(`${origin}/api/index`, {
+          const indexReq = new Request(`${origin}/api/index`, {
             method: "POST",
             headers,
             body: JSON.stringify({ entries: [saveResult.entry] }),
           });
+          const indexRes = await indexPOST(indexReq);
           if (!indexRes.ok) {
             console.error(
               `Index update failed for ${article.url}: status ${indexRes.status}`,
