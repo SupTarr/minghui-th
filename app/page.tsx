@@ -684,7 +684,7 @@ export default function Dashboard() {
         signal: controller.signal,
       });
       if (scrapeRes.status === 401 || scrapeRes.status === 403) {
-        throw new Error("Unauthorized");
+        throw new Error(`Unauthorized:${scrapeRes.status}`);
       }
       if (!scrapeRes.ok) {
         throw new Error(`Scrape API failed (Status ${scrapeRes.status})`);
@@ -752,7 +752,7 @@ export default function Dashboard() {
         }
 
         if (transRes.status === 401 || transRes.status === 403) {
-          throw new Error("Unauthorized");
+          throw new Error(`Unauthorized:${transRes.status}`);
         }
         if (!transRes.ok) {
           addLog(`❌ แปลล้มเหลวสำหรับบทความ: ${article.title_en}`);
@@ -791,7 +791,7 @@ export default function Dashboard() {
         }
 
         if (saveRes.status === 401 || saveRes.status === 403) {
-          throw new Error("Unauthorized");
+          throw new Error(`Unauthorized:${saveRes.status}`);
         }
         if (!saveRes.ok) {
           addLog(`❌ บันทึกล้มเหลวสำหรับบทความ: ${transData.title_th}`);
@@ -837,13 +837,21 @@ export default function Dashboard() {
         setStatusMessage("ยกเลิกกระบวนการซิงค์เรียบร้อยแล้ว");
       } else {
         console.error(err);
-        if (
-          err.message?.includes("Unauthorized") ||
-          err.message?.includes("401") ||
-          err.message?.includes("403")
-        ) {
-          addLog("❌ อีเมลนี้ไม่ได้รับสิทธิ์เข้าใช้งานระบบ หรือเซสชันหมดอายุ");
-          setStatusMessage("ไม่มีสิทธิ์เข้าใช้งานระบบ");
+        const authMatch = err.message?.match(/Unauthorized:(\d+)/);
+        if (authMatch) {
+          if (authMatch[1] === "403") {
+            // Valid Google sign-in, but the email isn't on the allow-list.
+            addLog(
+              `❌ อีเมล ${userEmail ?? "นี้"} ไม่อยู่ในรายชื่อที่ได้รับอนุญาตให้ใช้งานระบบ — โปรดติดต่อผู้ดูแลเพื่อขอสิทธิ์`,
+            );
+            setStatusMessage("อีเมลไม่ได้รับอนุญาต");
+          } else {
+            // 401 — token missing/expired/invalid.
+            addLog(
+              "❌ เซสชันหมดอายุหรือไม่ถูกต้อง — กรุณากด Sign Out แล้วลงชื่อเข้าใช้ใหม่อีกครั้ง",
+            );
+            setStatusMessage("เซสชันหมดอายุ");
+          }
         } else {
           setStatusMessage("เกิดข้อผิดพลาดในการแปล/บันทึก");
           addLog(`❌ ข้อผิดพลาด: ${err.message || String(err)}`);

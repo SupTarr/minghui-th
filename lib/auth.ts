@@ -26,25 +26,65 @@ export async function verifyGoogleToken(
   }
 }
 
-export async function isAuthorized(req: Request): Promise<boolean> {
+// Stable codes so the client can distinguish *why* a request was rejected
+// and show the right guidance (re-login vs. ask the owner for access).
+export type AuthReason =
+  | "missing_session" // no token supplied
+  | "invalid_session" // token absent/expired/invalid → user should sign in again
+  | "not_allowed" // valid Google account, but not on the allow-list
+  | "not_configured"; // server is missing ALLOWED_EMAIL
+
+export type AuthResult =
+  | { authorized: true }
+  | { authorized: false; status: 401 | 403; reason: AuthReason };
+
+export async function authorize(req: Request): Promise<AuthResult> {
   // 1. Check Cron / Bearer token (for Vercel Cron)
   const authHeader = req.headers.get("Authorization");
   if (authHeader) {
     const token = authHeader.replace("Bearer ", "").trim();
     if (process.env.CRON_SECRET && token === process.env.CRON_SECRET) {
-      return true;
+      return { authorized: true };
     }
   }
 
   // 2. Check X-Google-ID-Token header (custom header sent from our UI)
   const googleToken = req.headers.get("X-Google-ID-Token");
-  if (googleToken) {
-    const email = await verifyGoogleToken(googleToken);
-    if (email && email === process.env.ALLOWED_EMAIL) {
-      return true;
-    }
-    console.warn(`Unauthorized email attempt: ${email}`);
+  if (!googleToken) {
+    return { authorized: false, status: 401, reason: "missing_session" };
   }
 
-  return false;
+  const email = await verifyGoogleToken(googleToken);
+  if (!email) {
+    // Token couldn't be verified — expired, malformed, or wrong audience.
+    return { authorized: false, status: 401, reason: "invalid_session" };
+  }
+
+  // ALLOWED_EMAIL may be a single address or a comma-separated allow-list.
+  // Compare case-insensitively and trimmed (Google emails are case-insensitive).
+  const allowed = (process.env.ALLOWED_EMAIL || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (allowed.length === 0) {
+    console.error(
+      "ALLOWED_EMAIL is not set — refusing all sign-ins. Set ALLOWED_EMAIL to the owner's email in your environment.",
+    );
+    return { authorized: false, status: 403, reason: "not_configured" };
+  }
+
+  if (allowed.includes(email.toLowerCase())) {
+    return { authorized: true };
+  }
+
+  console.warn(`Unauthorized email attempt: ${email}`);
+  return { authorized: false, status: 403, reason: "not_allowed" };
+}
+
+/**
+ * Boolean convenience wrapper around {@link authorize}.
+ */
+export async function isAuthorized(req: Request): Promise<boolean> {
+  return (await authorize(req)).authorized;
 }
