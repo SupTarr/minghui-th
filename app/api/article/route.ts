@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
-import { readFileAtPath } from "@/lib/gdrive";
+import { unstable_cache } from "next/cache";
+import { readFileAtPath, ARCHIVE_CACHE_TAG } from "@/lib/gdrive";
 
 export const dynamic = "force-dynamic";
+
+// Article content is immutable once saved, so cache it aggressively keyed by
+// filePath. The archive tag still lets us purge it on demand if ever needed.
+const readArticleCached = unstable_cache(
+  (filePath: string) => readFileAtPath(filePath),
+  ["article-content"],
+  { tags: [ARCHIVE_CACHE_TAG], revalidate: 3600 },
+);
 
 export async function GET(req: Request) {
   try {
@@ -15,7 +24,7 @@ export async function GET(req: Request) {
       );
     }
 
-    const content = await readFileAtPath(filePath);
+    const content = await readArticleCached(filePath);
     if (!content) {
       return NextResponse.json(
         { error: `Article at path "${filePath}" not found` },
