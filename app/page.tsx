@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
-import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
 
 interface Article {
   url: string;
@@ -11,7 +10,7 @@ interface Article {
   filePath?: string;
 }
 
-function DashboardContent() {
+export default function Dashboard() {
   const [archivedArticles, setArchivedArticles] = useState<Article[]>([]);
   const [newlySynced, setNewlySynced] = useState<Article[]>([]);
   const [activeTab, setActiveTab] = useState<'archived' | 'newly-synced'>('archived');
@@ -23,12 +22,7 @@ function DashboardContent() {
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string>('');
 
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
-  
-  const readingArticlePath = searchParams.get('article');
-  
+  const [readingArticlePath, setReadingArticlePath] = useState<string | null>(null);
   const [articleContent, setArticleContent] = useState<any | null>(null);
   const [isLoadingArticle, setIsLoadingArticle] = useState(false);
   const [readerLanguage, setReaderLanguage] = useState<'th' | 'en' | 'both'>('th');
@@ -48,16 +42,19 @@ function DashboardContent() {
   }
 
   function openArticle(path: string) {
-    const params = new URLSearchParams(searchParams.toString());
+    setReadingArticlePath(path);
+    const params = new URLSearchParams(window.location.search);
     params.set('article', path);
-    router.push(`${pathname}?${params.toString()}`);
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.pushState({ path: newUrl }, '', newUrl);
   }
 
   function closeArticle() {
-    const params = new URLSearchParams(searchParams.toString());
+    setReadingArticlePath(null);
+    const params = new URLSearchParams(window.location.search);
     params.delete('article');
-    const newUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname;
-    router.push(newUrl);
+    const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
+    window.history.pushState({ path: newUrl }, '', newUrl);
   }
 
   const [copied, setCopied] = useState(false);
@@ -139,6 +136,24 @@ function DashboardContent() {
       setArticleContent(null);
     }
   }, [readingArticlePath]);
+
+  // Synchronize readingArticlePath with URL on mount & handle browser back/forward buttons
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const articleParam = params.get('article');
+    if (articleParam) {
+      setReadingArticlePath(articleParam);
+    }
+
+    function handlePopState() {
+      const p = new URLSearchParams(window.location.search);
+      const art = p.get('article');
+      setReadingArticlePath(art || null);
+    }
+    
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   async function loadArticleContent(path: string) {
     try {
@@ -1139,21 +1154,5 @@ function DashboardContent() {
         </div>
       )}
     </div>
-  );
-}
-
-export default function Dashboard() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-500 space-y-4">
-        <svg className="animate-spin h-10 w-10 text-teal-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <p className="text-sm">กำลังโหลดแดชบอร์ด...</p>
-      </div>
-    }>
-      <DashboardContent />
-    </Suspense>
   );
 }
