@@ -124,7 +124,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const existingUrls = new Set(indexData.map((item: { url: string }) => item.url));
+    const existingUrls = new Set(
+      indexData.map((item: { url: string }) => item.url),
+    );
 
     // Filter to only new articles
     const newArticles = articles.filter(

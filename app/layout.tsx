@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
-import { Inter, Geist_Mono, Noto_Serif_Thai, Playfair_Display, Sarabun } from "next/font/google";
+import {
+  Inter,
+  Geist_Mono,
+  Noto_Serif_Thai,
+  Playfair_Display,
+  Sarabun,
+} from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -46,7 +52,9 @@ export default function RootLayout({
       lang="th"
       className={`${inter.variable} ${sarabun.variable} ${geistMono.variable} ${notoSerifThai.variable} ${playfairDisplay.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-[#060913] text-[#f8fafc]">{children}</body>
+      <body className="min-h-full flex flex-col bg-[#060913] text-[#f8fafc]">
+        {children}
+      </body>
     </html>
   );
 }
