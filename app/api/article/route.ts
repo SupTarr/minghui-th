@@ -24,10 +24,11 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json(content);
-  } catch (error: any) {
-    console.error("Error in GET /api/article:", error);
+  } catch (error) {
+    const err = error as Error;
+    console.error("Error in GET /api/article:", err);
     return NextResponse.json(
-      { error: error.message || "Internal Server Error" },
+      { error: err.message || "Internal Server Error" },
       { status: 500 },
     );
   }

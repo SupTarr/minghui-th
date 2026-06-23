@@ -1,4 +1,4 @@
-import { google } from "googleapis";
+import { google, drive_v3 } from "googleapis";
 
 const SCOPES = ["https://www.googleapis.com/auth/drive"];
 
@@ -42,8 +42,8 @@ export function initDrive() {
 /**
  * Helper to construct list parameters, adding driveId and corpora if GOOGLE_DRIVE_ID is set.
  */
-function getListParams(query: string, fields: string) {
-  const params: any = {
+function getListParams(query: string, fields: string): drive_v3.Params$Resource$Files$List {
+  const params: drive_v3.Params$Resource$Files$List = {
     q: query,
     fields: fields,
     supportsAllDrives: true,
@@ -59,7 +59,7 @@ function getListParams(query: string, fields: string) {
   return params;
 }
 
-async function resolvePathToId(drive: any, path: string): Promise<string> {
+async function resolvePathToId(drive: drive_v3.Drive, path: string): Promise<string> {
   const parts = path.split("/").filter((p) => p.length > 0);
   let currentParentId = "root";
 
@@ -92,7 +92,7 @@ async function resolvePathToId(drive: any, path: string): Promise<string> {
  * Returns the resolved Google Drive root folder ID.
  * If GOOGLE_DRIVE_FOLDER_ID contains a path (e.g., /Folder/Subfolder), it resolves it to an ID.
  */
-export async function getRootFolderId(drive: any): Promise<string> {
+export async function getRootFolderId(drive: drive_v3.Drive): Promise<string> {
   const rawId = process.env.GOOGLE_DRIVE_FOLDER_ID;
   if (!rawId) {
     throw new Error(
@@ -146,7 +146,7 @@ export async function createFolder(
  * Reads a JSON file from the root folder in Google Drive.
  * Returns null if the file does not exist.
  */
-export async function readFile(fileName: string): Promise<any> {
+export async function readFile(fileName: string): Promise<unknown> {
   const drive = initDrive();
   const rootFolderId = await getRootFolderId(drive);
 
@@ -190,7 +190,7 @@ export async function readFile(fileName: string): Promise<any> {
 export async function writeFile(
   folderName: string | null,
   fileName: string,
-  content: any,
+  content: unknown,
 ): Promise<string> {
   const drive = initDrive();
   const rootFolderId = await getRootFolderId(drive);
@@ -243,7 +243,7 @@ export async function writeFile(
  * Reads a JSON file from a specific relative path (e.g. /2026-06-22/234818.json)
  * relative to the root Google Drive folder.
  */
-export async function readFileAtPath(filePath: string): Promise<any> {
+export async function readFileAtPath(filePath: string): Promise<unknown> {
   const drive = initDrive();
   const rootFolderId = await getRootFolderId(drive);
 

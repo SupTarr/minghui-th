@@ -48,10 +48,11 @@ export async function GET() {
       console.warn("Could not read index.json in GET handler:", e);
     }
     return NextResponse.json({ articles: indexData });
-  } catch (error: any) {
-    console.error("Error in GET /api/scrape:", error);
+  } catch (error) {
+    const err = error as Error;
+    console.error("Error in GET /api/scrape:", err);
     return NextResponse.json(
-      { error: error.message || "Internal Server Error" },
+      { error: err.message || "Internal Server Error" },
       { status: 500 },
     );
   }
@@ -123,7 +124,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const existingUrls = new Set(indexData.map((item: any) => item.url));
+    const existingUrls = new Set(indexData.map((item: { url: string }) => item.url));
 
     // Filter to only new articles
     const newArticles = articles.filter(
@@ -131,10 +132,11 @@ export async function POST(req: Request) {
     );
 
     return NextResponse.json({ articles: newArticles });
-  } catch (error: any) {
-    console.error("Error in /api/scrape:", error);
+  } catch (error) {
+    const err = error as Error;
+    console.error("Error in /api/scrape:", err);
     return NextResponse.json(
-      { error: error.message || "Internal Server Error" },
+      { error: err.message || "Internal Server Error" },
       { status: 500 },
     );
   }

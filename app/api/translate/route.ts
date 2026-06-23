@@ -136,14 +136,15 @@ Article content: ${content_en}`;
         title_th: parsedTranslation.title_th,
         content_th: parsedTranslation.content_th,
       });
-    } catch (parseError) {
+    } catch {
       console.error("Failed to parse JSON response from Gemini:", responseText);
       throw new Error("Gemini API did not return valid JSON translation.");
     }
-  } catch (error: any) {
-    console.error("Error in /api/translate:", error);
+  } catch (error) {
+    const err = error as Error;
+    console.error("Error in /api/translate:", err);
     return NextResponse.json(
-      { error: error.message || "Internal Server Error" },
+      { error: err.message || "Internal Server Error" },
       { status: 500 },
     );
   }

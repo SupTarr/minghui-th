@@ -4,7 +4,7 @@ import { isAuthorized } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 async function runPipeline(origin: string, incomingHeaders: Headers) {
-  const headers: any = {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
   const authHeader = incomingHeaders.get("Authorization");
@@ -98,10 +98,11 @@ export async function GET(req: Request) {
       processedCount: processed.length,
       processed,
     });
-  } catch (error: any) {
-    console.error("Cron pipeline exception:", error);
+  } catch (error) {
+    const err = error as Error;
+    console.error("Cron pipeline exception:", err);
     return NextResponse.json(
-      { error: error.message || "Internal Server Error" },
+      { error: err.message || "Internal Server Error" },
       { status: 500 },
     );
   }
@@ -121,10 +122,11 @@ export async function POST(req: Request) {
       processedCount: processed.length,
       processed,
     });
-  } catch (error: any) {
-    console.error("Cron pipeline exception:", error);
+  } catch (error) {
+    const err = error as Error;
+    console.error("Cron pipeline exception:", err);
     return NextResponse.json(
-      { error: error.message || "Internal Server Error" },
+      { error: err.message || "Internal Server Error" },
       { status: 500 },
     );
   }
