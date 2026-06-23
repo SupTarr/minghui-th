@@ -2,9 +2,11 @@ import { google, drive_v3 } from "googleapis";
 
 const SCOPES = ["https://www.googleapis.com/auth/drive"];
 
-// Cache tag for the read paths (article list + content). Bump via revalidateTag
-// whenever the catalog changes so new articles appear without waiting for TTL.
-export const ARCHIVE_CACHE_TAG = "archive";
+// Cache tags for the read paths, kept separate on purpose: the article list
+// changes when new articles are synced (purge it then), but article content is
+// immutable once saved, so it has its own tag and isn't purged on every sync.
+export const ARCHIVE_LIST_TAG = "archive-list";
+export const ARTICLE_CONTENT_TAG = "article-content";
 
 // Reuse the Drive client across invocations within a warm container. Building a
 // fresh client per call discards googleapis' cached OAuth access token, forcing
