@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 
 interface Article {
   url: string;
@@ -10,7 +11,7 @@ interface Article {
   filePath?: string;
 }
 
-export default function Dashboard() {
+function DashboardContent() {
   const [archivedArticles, setArchivedArticles] = useState<Article[]>([]);
   const [newlySynced, setNewlySynced] = useState<Article[]>([]);
   const [activeTab, setActiveTab] = useState<'archived' | 'newly-synced'>('archived');
@@ -21,7 +22,13 @@ export default function Dashboard() {
   const [logs, setLogs] = useState<string[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const [readingArticlePath, setReadingArticlePath] = useState<string | null>(null);
+
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  
+  const readingArticlePath = searchParams.get('article');
+  
   const [articleContent, setArticleContent] = useState<any | null>(null);
   const [isLoadingArticle, setIsLoadingArticle] = useState(false);
   const [readerLanguage, setReaderLanguage] = useState<'th' | 'en' | 'both'>('th');
@@ -40,8 +47,20 @@ export default function Dashboard() {
     }
   }
 
+  function openArticle(path: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('article', path);
+    router.push(`${pathname}?${params.toString()}`);
+  }
+
+  function closeArticle() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('article');
+    const newUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname;
+    router.push(newUrl);
+  }
+
   const [copied, setCopied] = useState(false);
-  const [isInitialMountChecked, setIsInitialMountChecked] = useState(false);
 
   function handleCopyShareLink() {
     if (!readingArticlePath) return;
@@ -59,47 +78,6 @@ export default function Dashboard() {
       setArticleContent(null);
     }
   }, [readingArticlePath]);
-
-  // Synchronize readingArticlePath with URL query parameter
-  useEffect(() => {
-    if (!isInitialMountChecked) return;
-    
-    const params = new URLSearchParams(window.location.search);
-    const currentParam = params.get('article');
-    
-    if (readingArticlePath) {
-      if (currentParam !== readingArticlePath) {
-        params.set('article', readingArticlePath);
-        const newUrl = `${window.location.pathname}?${params.toString()}`;
-        window.history.pushState({ path: newUrl }, '', newUrl);
-      }
-    } else {
-      if (params.has('article')) {
-        params.delete('article');
-        const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
-        window.history.pushState({ path: newUrl }, '', newUrl);
-      }
-    }
-  }, [readingArticlePath, isInitialMountChecked]);
-
-  // Check query params on mount and handle popstate (browser back/forward button)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const articleParam = params.get('article');
-    if (articleParam) {
-      setReadingArticlePath(articleParam);
-    }
-    setIsInitialMountChecked(true);
-
-    function handlePopState() {
-      const p = new URLSearchParams(window.location.search);
-      const art = p.get('article');
-      setReadingArticlePath(art || null);
-    }
-    
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
 
   async function loadArticleContent(path: string) {
     try {
@@ -874,7 +852,7 @@ export default function Dashboard() {
                     <div className="flex flex-wrap gap-2 self-stretch sm:self-center">
                       {article.filePath && (
                         <button
-                          onClick={() => setReadingArticlePath(article.filePath!)}
+                          onClick={() => openArticle(article.filePath!)}
                           className="inline-flex items-center justify-center gap-1.5 text-xs text-teal-400 hover:text-slate-950 border border-teal-500/20 hover:bg-teal-400 bg-teal-500/5 px-3.5 py-2.5 rounded-xl transition-all duration-300 font-semibold"
                         >
                           <span>อ่านบทความ</span>
@@ -910,7 +888,7 @@ export default function Dashboard() {
           <div className="sticky top-0 bg-slate-900/90 border-b border-slate-800 backdrop-blur-md z-10 px-4 py-4 sm:px-6 lg:px-8">
             <div className="max-w-5xl mx-auto flex items-center justify-between">
               <button
-                onClick={() => setReadingArticlePath(null)}
+                onClick={closeArticle}
                 className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors font-medium"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -1050,5 +1028,21 @@ export default function Dashboard() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-500 space-y-4">
+        <svg className="animate-spin h-10 w-10 text-teal-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p className="text-sm">กำลังโหลดแดชบอร์ด...</p>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   );
 }
