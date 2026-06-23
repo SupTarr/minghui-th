@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache";
 import {
   readDayIndex,
   writeDayIndex,
-  ARCHIVE_CACHE_TAG,
+  ARCHIVE_LIST_TAG,
   type CatalogEntry,
 } from "@/lib/gdrive";
 import { authorize } from "@/lib/auth";
@@ -63,11 +63,12 @@ export async function POST(req: Request) {
       days.push(date);
     }
 
-    // New articles landed — expire the cached read paths immediately so they
+    // New articles landed — expire the cached article list immediately so they
     // show up on the next load instead of serving stale (expire:0 is the
     // sanctioned route-handler pattern for immediate invalidation in Next 16).
+    // Article content is immutable and has its own tag, so it's left untouched.
     if (days.length > 0) {
-      revalidateTag(ARCHIVE_CACHE_TAG, { expire: 0 });
+      revalidateTag(ARCHIVE_LIST_TAG, { expire: 0 });
     }
 
     return NextResponse.json({ success: true, added, days });
