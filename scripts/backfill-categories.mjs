@@ -150,6 +150,7 @@ async function createJson(parentId, name, obj) {
 // Category resolution from the Minghui article breadcrumb
 // ---------------------------------------------------------------------------
 const categoryCache = new Map(); // url -> category string | null
+const urlStatus = new Map(); // url -> "ok" | "404" | "http:NNN" | "error" (for --verify dead-link check)
 
 async function fetchCategory(url) {
   if (categoryCache.has(url)) return categoryCache.get(url);
@@ -157,6 +158,7 @@ async function fetchCategory(url) {
   try {
     const res = await fetch(url, { headers: { "User-Agent": UA } });
     if (res.ok) {
+      urlStatus.set(url, "ok");
       const html = await res.text();
       const bc = html.match(/<div class="bread-crumb">([\s\S]*?)<\/div>/);
       if (bc) {
@@ -164,14 +166,19 @@ async function fetchCategory(url) {
         if (links.length) category = links[links.length - 1][1].trim();
       }
     } else {
+      urlStatus.set(url, res.status === 404 ? "404" : `http:${res.status}`);
       console.warn(`  ! HTTP ${res.status} for ${url}`);
     }
   } catch (e) {
+    urlStatus.set(url, "error");
     console.warn(`  ! fetch failed for ${url}: ${e.message}`);
   }
   categoryCache.set(url, category);
   return category;
 }
+
+// True when the string contains at least one Thai-script character.
+const hasThai = (s) => /[฀-๿]/.test(s || "");
 
 // Resolve categories for many urls with a small concurrency pool.
 async function resolveCategories(urls) {
@@ -261,14 +268,32 @@ async function main() {
   let totalIndexesRebuilt = 0;
   let totalRebuiltEntries = 0;
   let totalAdopted = 0;
-  // --verify tallies
-  let vOk = 0;
-  let vMismatch = 0;
-  let vMissing = 0;
-  let vUnresolved = 0;
-  let vFieldDrift = 0; // index entry fields disagree with the article file
-  let vOrphan = 0; // article file on disk not referenced by the index
-  let vDup = 0; // same url listed more than once in an index
+
+  // --verify tallies. `ok` counts entries that pass every check; the rest are
+  // independent issue counters (one entry can trip more than one).
+  const au = {
+    ok: 0,
+    schema: 0, // index entry missing a required field
+    idMismatch: 0, // url id != filename id != filePath id
+    fieldDrift: 0, // index entry fields disagree with the article file
+    fileMissing: 0, // index entry points to an absent/unreadable article file
+    badJson: 0, // index.json or an article file is not valid JSON
+    dateMisfiled: 0, // folder name / entry.date / published_date disagree
+    catMismatch: 0,
+    catMissing: 0,
+    catUnresolved: 0,
+    transEmpty: 0, // missing/empty Thai title or content
+    transEnglish: 0, // Thai field contains no Thai characters
+    transShort: 0, // Thai content suspiciously short vs the English
+    orphan: 0, // article file on disk not referenced by the index
+    dup: 0, // same url listed more than once within one day's index
+    crossDup: 0, // same url archived under more than one date folder
+    stray: 0, // unexpected file in a date folder
+    deadUrl: 0, // source article URL returns 404 / unreachable
+    noIndex: 0, // date folder has article files but no index.json
+  };
+  // url -> "date/file", to catch the same article archived under two dates.
+  const globalUrls = new Map();
 
   for (const folder of dateFolders) {
     const date = folder.name;
@@ -280,7 +305,13 @@ async function main() {
 
     const indexId = byName.get("index.json");
     if (!indexId) {
-      if (REBUILD) {
+      if (VERIFY) {
+        const n = [...byName.keys()].filter((x) => /^\d+\.json$/.test(x)).length;
+        au.noIndex++;
+        console.log(
+          `${date}: NO-INDEX — ${n} article file(s) present but no index.json`,
+        );
+      } else if (REBUILD) {
         const n = await rebuildIndex(date, folder.id, byName);
         if (n) {
           totalIndexesRebuilt++;
@@ -298,11 +329,21 @@ async function main() {
     try {
       entries = await downloadJson(indexId);
     } catch (e) {
-      console.warn(`${date}: failed to read index.json (${e.message}) — skipping`);
+      if (VERIFY) {
+        au.badJson++;
+        console.log(`${date}: BAD-JSON index.json is not parseable (${e.message})`);
+      } else {
+        console.warn(`${date}: failed to read index.json (${e.message}) — skipping`);
+      }
       continue;
     }
     if (!Array.isArray(entries)) {
-      console.warn(`${date}: index.json is not an array — skipping`);
+      if (VERIFY) {
+        au.badJson++;
+        console.log(`${date}: BAD-JSON index.json is not a JSON array`);
+      } else {
+        console.warn(`${date}: index.json is not an array — skipping`);
+      }
       continue;
     }
 
@@ -311,41 +352,67 @@ async function main() {
     // Resolve true categories for this day's articles in parallel.
     await resolveCategories(entries.map((e) => e.url).filter(Boolean));
 
-    // --verify: read-only audit. Two layers:
-    //  (a) category three-way: index entry vs article file vs Minghui breadcrumb
-    //  (b) index<->data integrity: fields agree, no missing/orphan files, no dups
+    // --verify: read-only audit. Reports (never writes) across these checks:
+    //   category three-way (index vs file vs Minghui breadcrumb),
+    //   field drift, schema completeness, id/date consistency,
+    //   missing/orphan/stray files, in-day & cross-day url dups,
+    //   translation quality, and dead source links.
     if (VERIFY) {
       const referenced = new Set(); // article file names the index points to
       const urlSeen = new Set();
       const articleFileNames = [...byName.keys()].filter((n) =>
         /^\d+\.json$/.test(n),
       );
+      const REQUIRED = ["url", "title_en", "title_th", "date", "filePath"];
+      const log = (id, tag, msg) => console.log(`${date}: ${id}  ${tag} ${msg}`);
 
       for (const entry of entries) {
-        if (!entry?.url) {
-          vFieldDrift++;
-          console.log(`${date}: index entry with no url — ${JSON.stringify(entry).slice(0, 80)}`);
-          continue;
-        }
-        const id = entry.url.split("/").pop();
+        const id = (entry?.url || entry?.filePath || "?").split("/").pop();
+        const issues = [];
 
-        // Duplicate url within this day's index.
+        // Schema: required fields present.
+        const missingFields = REQUIRED.filter((f) => !entry?.[f]);
+        if (missingFields.length) {
+          au.schema++;
+          issues.push("schema");
+          log(id, "SCHEMA", `missing field(s): ${missingFields.join(", ")}`);
+        }
+        if (!entry?.url) continue; // nothing more we can key on
+
+        // In-day duplicate url.
         if (urlSeen.has(entry.url)) {
-          vDup++;
-          console.log(`${date}: ${id}  DUPLICATE url in index`);
+          au.dup++;
+          issues.push("dup");
+          log(id, "DUPLICATE", "url repeated in this day's index");
         }
         urlSeen.add(entry.url);
 
+        // Cross-day duplicate url (same article under two date folders).
+        const where = `${date}/${(entry.filePath || "").split("/").pop()}`;
+        if (globalUrls.has(entry.url)) {
+          au.crossDup++;
+          issues.push("crossDup");
+          log(id, "CROSS-DUP", `also archived at ${globalUrls.get(entry.url)}`);
+        } else {
+          globalUrls.set(entry.url, where);
+        }
+
+        // ID consistency: url id == filePath id == actual filename.
+        const urlId = (entry.url.match(/\/(\d+)\.html/) || [])[1];
         const fileName = (entry.filePath || "").split("/").pop();
+        const pathId = (fileName.match(/^(\d+)\.json$/) || [])[1];
+        if (urlId && pathId && urlId !== pathId) {
+          au.idMismatch++;
+          issues.push("idMismatch");
+          log(id, "ID-MISMATCH", `url id ${urlId} != file id ${pathId}`);
+        }
+
         if (fileName) referenced.add(fileName);
         const articleId = fileName && byName.get(fileName);
-
-        // index entry -> article file must exist.
         if (!articleId) {
-          vMissing++;
-          console.log(
-            `${date}: ${id}  FILE-MISSING  index points to "${entry.filePath}" which is absent`,
-          );
+          au.fileMissing++;
+          issues.push("fileMissing");
+          log(id, "FILE-MISSING", `index points to "${entry.filePath}" (absent)`);
           continue;
         }
 
@@ -353,62 +420,106 @@ async function main() {
         try {
           art = await downloadJson(articleId);
         } catch (e) {
-          vMissing++;
-          console.log(`${date}: ${id}  FILE-UNREADABLE (${e.message})`);
+          au.badJson++;
+          issues.push("badJson");
+          log(id, "BAD-JSON", `article file unparseable (${e.message})`);
           continue;
         }
         if (!art || typeof art !== "object") {
-          vMissing++;
-          console.log(`${date}: ${id}  FILE-INVALID (not a JSON object)`);
+          au.badJson++;
+          issues.push("badJson");
+          log(id, "BAD-JSON", "article file is not a JSON object");
           continue;
         }
 
-        // (b) field integrity: index entry must agree with the article file.
+        // Field drift: index entry must agree with the article file.
         const drift = [];
         const cmp = (field, a, b) => {
-          if ((a ?? "") !== (b ?? "")) drift.push(`${field}: index="${a ?? "—"}" file="${b ?? "—"}"`);
+          if ((a ?? "") !== (b ?? "")) drift.push(`${field}(index="${a ?? "—"}" file="${b ?? "—"}")`);
         };
         cmp("url", entry.url, art.url);
         cmp("title_en", entry.title_en, art.title_en);
         cmp("title_th", entry.title_th, art.title_th);
         cmp("date", entry.date, art.published_date);
+        if (drift.length) {
+          au.fieldDrift++;
+          issues.push("fieldDrift");
+          log(id, "FIELD-DRIFT", drift.join("; "));
+        }
 
-        // (a) category three-way.
+        // Date misfiling: folder name == entry.date == published_date.
+        if (entry.date !== date || (art.published_date && art.published_date !== date)) {
+          au.dateMisfiled++;
+          issues.push("dateMisfiled");
+          log(id, "DATE-MISFILED", `folder=${date} entry.date=${entry.date} published_date=${art.published_date ?? "—"}`);
+        }
+
+        // Category three-way.
         const truth = categoryCache.get(entry.url);
         const idxCat = entry.category ?? "—";
         const artCat = art.category ?? "—";
-        let catState = "ok";
         if (!truth) {
-          catState = "unresolved";
+          au.catUnresolved++;
+          issues.push("catUnresolved");
+          log(id, "CATEGORY-UNRESOLVED", "breadcrumb unreadable");
         } else if (idxCat !== truth || artCat !== truth) {
-          catState = idxCat === "—" || artCat === "—" ? "missing" : "mismatch";
+          if (idxCat === "—" || artCat === "—") {
+            au.catMissing++;
+            issues.push("catMissing");
+            log(id, "CATEGORY-MISSING", `index="${idxCat}" file="${artCat}" truth="${truth}"`);
+          } else {
+            au.catMismatch++;
+            issues.push("catMismatch");
+            log(id, "CATEGORY-MISMATCH", `index="${idxCat}" file="${artCat}" truth="${truth}"`);
+          }
         }
 
-        if (drift.length === 0 && catState === "ok") {
-          vOk++;
+        // Translation quality.
+        const tTh = (art.title_th || "").trim();
+        const cTh = (art.content_th || "").trim();
+        const cEn = (art.content_en || "").trim();
+        if (!tTh || !cTh) {
+          au.transEmpty++;
+          issues.push("transEmpty");
+          log(id, "TRANS-EMPTY", `title_th=${tTh ? "ok" : "EMPTY"} content_th=${cTh ? "ok" : "EMPTY"}`);
         } else {
-          if (drift.length) {
-            vFieldDrift++;
-            console.log(`${date}: ${id}  FIELD-DRIFT  ${drift.join("; ")}`);
+          if (!hasThai(tTh) || !hasThai(cTh)) {
+            au.transEnglish++;
+            issues.push("transEnglish");
+            log(id, "TRANS-ENGLISH", "Thai field has no Thai characters (untranslated?)");
           }
-          if (catState === "unresolved") {
-            vUnresolved++;
-            console.log(`${date}: ${id}  CATEGORY-UNRESOLVED (breadcrumb unreadable)`);
-          } else if (catState === "missing") {
-            vMissing++;
-            console.log(`${date}: ${id}  CATEGORY-MISSING index="${idxCat}" file="${artCat}" truth="${truth}"`);
-          } else if (catState === "mismatch") {
-            vMismatch++;
-            console.log(`${date}: ${id}  CATEGORY-MISMATCH index="${idxCat}" file="${artCat}" truth="${truth}"`);
+          // Suspiciously short Thai content relative to the English source.
+          if (cEn && cTh.length < cEn.length * 0.15) {
+            au.transShort++;
+            issues.push("transShort");
+            log(id, "TRANS-SHORT", `content_th ${cTh.length} chars vs content_en ${cEn.length} (truncated?)`);
           }
+        }
+
+        // Dead source link (status captured during category fetch).
+        const st = urlStatus.get(entry.url);
+        if (st && st !== "ok") {
+          au.deadUrl++;
+          issues.push("deadUrl");
+          log(id, "DEAD-URL", `source returned ${st}`);
+        }
+
+        if (issues.length === 0) au.ok++;
+      }
+
+      // Orphan article files: present on disk, absent from the index.
+      for (const name of articleFileNames) {
+        if (!referenced.has(name)) {
+          au.orphan++;
+          console.log(`${date}: ${name}  ORPHAN — article file not listed in index.json`);
         }
       }
 
-      // Orphan article files present on disk but absent from the index.
-      for (const name of articleFileNames) {
-        if (!referenced.has(name)) {
-          vOrphan++;
-          console.log(`${date}: ${name}  ORPHAN — article file not listed in index.json`);
+      // Stray files: not an article json and not the index.
+      for (const name of byName.keys()) {
+        if (name !== "index.json" && !/^\d+\.json$/.test(name)) {
+          au.stray++;
+          console.log(`${date}: ${name}  STRAY — unexpected file in date folder`);
         }
       }
       continue; // verify never mutates
@@ -496,17 +607,21 @@ async function main() {
   }
 
   if (VERIFY) {
-    const bad =
-      vMismatch + vMissing + vUnresolved + vFieldDrift + vOrphan + vDup;
+    const { ok, ...issues } = au;
+    const bad = Object.values(issues).reduce((a, b) => a + b, 0);
     console.log(
-      `\nVerify complete. entries: ${totalEntries}, ok: ${vOk}\n` +
-        `  category — mismatch: ${vMismatch}, missing: ${vMissing}, unresolved: ${vUnresolved}\n` +
-        `  integrity — field-drift: ${vFieldDrift}, file-missing: counted in missing, ` +
-        `orphan files: ${vOrphan}, duplicate urls: ${vDup}`,
+      `\nVerify complete. entries scanned: ${totalEntries}, fully OK: ${ok}\n` +
+        `  category   — mismatch: ${au.catMismatch}, missing: ${au.catMissing}, unresolved: ${au.catUnresolved}\n` +
+        `  integrity  — schema: ${au.schema}, id-mismatch: ${au.idMismatch}, field-drift: ${au.fieldDrift}, ` +
+        `date-misfiled: ${au.dateMisfiled}, bad-json: ${au.badJson}\n` +
+        `  files      — file-missing: ${au.fileMissing}, orphan: ${au.orphan}, stray: ${au.stray}, no-index: ${au.noIndex}\n` +
+        `  duplicates — in-day: ${au.dup}, cross-day: ${au.crossDup}\n` +
+        `  translation— empty: ${au.transEmpty}, english-leak: ${au.transEnglish}, too-short: ${au.transShort}\n` +
+        `  source     — dead-url: ${au.deadUrl}`,
     );
     console.log(
       bad === 0
-        ? "✓ index.json and the article data agree; all categories correct."
+        ? "✓ All checks passed: index.json, article data, categories, and translations are consistent."
         : `✗ ${bad} issue(s) found — see lines above.`,
     );
     return;
