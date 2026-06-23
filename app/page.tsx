@@ -41,6 +41,129 @@ interface WindowWithGoogle extends Window {
   };
 }
 
+function LotusFlower({ active, progress }: { active: boolean; progress: number }) {
+  return (
+    <div className="relative w-32 h-32 flex items-center justify-center mx-auto mb-4 animate-float">
+      {/* Glow behind the lotus */}
+      <div
+        className={`absolute inset-4 rounded-full blur-2xl transition-all duration-1000 ${
+          active
+            ? "bg-teal-500/25 shadow-[0_0_40px_rgba(20,184,166,0.4)] animate-pulse"
+            : "bg-amber-500/[0.04] shadow-[0_0_20px_rgba(234,179,8,0.05)]"
+        }`}
+      />
+
+      {/* Orbit Ring */}
+      <svg
+        className={`absolute inset-0 w-full h-full ${
+          active ? "animate-spin" : "animate-pulse"
+        }`}
+        style={{ animationDuration: active ? "12s" : "4s" }}
+        viewBox="0 0 100 100"
+      >
+        <circle
+          className="text-slate-800/40"
+          strokeWidth="1.5"
+          stroke="currentColor"
+          fill="transparent"
+          r="44"
+          cx="50"
+          cy="50"
+        />
+        {active && (
+          <circle
+            className="text-teal-400/80 transition-all duration-300"
+            strokeWidth="2"
+            strokeDasharray={276.46}
+            strokeDashoffset={276.46 - (276.46 * progress) / 100}
+            strokeLinecap="round"
+            stroke="currentColor"
+            fill="transparent"
+            r="44"
+            cx="50"
+            cy="50"
+          />
+        )}
+      </svg>
+
+      {/* Lotus Petals SVG */}
+      <svg
+        className={`w-16 h-16 transition-all duration-1000 ${
+          active ? "text-teal-400 scale-105" : "text-slate-500 hover:text-teal-300"
+        }`}
+        viewBox="0 0 100 100"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      >
+        {/* Base leaves */}
+        <path
+          d="M50 78 C35 78, 25 72, 25 65 C25 58, 35 55, 50 55 C65 55, 75 58, 75 65 C75 72, 65 78, 50 78 Z"
+          fill="currentColor"
+          fillOpacity="0.05"
+        />
+
+        {/* Outer Petals */}
+        <path
+          d="M50 80 C15 70, 10 40, 50 20 C90 40, 85 70, 50 80 Z"
+          fill="currentColor"
+          fillOpacity={active ? 0.12 : 0.03}
+        />
+
+        {/* Left/Right Petals */}
+        <path
+          d="M50 80 C20 75, 20 45, 50 35 C80 45, 80 75, 50 80 Z"
+          fill="currentColor"
+          fillOpacity={active ? 0.1 : 0.02}
+        />
+
+        {/* Center Petals */}
+        <path
+          d="M50 80 C32 75, 32 50, 50 42 C68 50, 68 75, 50 80 Z"
+          fill="currentColor"
+          fillOpacity={active ? 0.18 : 0.04}
+        />
+
+        {/* Core Bud */}
+        <path
+          d="M50 80 C40 75, 40 60, 50 50 C60 60, 60 75, 50 80 Z"
+          fill="currentColor"
+          fillOpacity={active ? 0.3 : 0.08}
+          strokeWidth="2"
+        />
+      </svg>
+    </div>
+  );
+}
+
+function formatLogLine(log: string) {
+  let timestamp = "";
+  let message = log;
+  const match = log.match(/^(\[[0-9:]{8}\])\s*(.*)$/);
+  if (match) {
+    timestamp = match[1];
+    message = match[2];
+  }
+
+  let colorClass = "text-slate-300";
+  if (message.includes("❌") || message.includes("🛑") || message.toLowerCase().includes("fail") || message.includes("ล้มเหลว") || message.includes("ข้อผิดพลาด")) {
+    colorClass = "text-rose-400";
+  } else if (message.includes("⚠️") || message.toLowerCase().includes("warn") || message.includes("ยกเลิก")) {
+    colorClass = "text-amber-400";
+  } else if (message.includes("✅") || message.includes("🎉") || message.includes("เสร็จสิ้น") || message.includes("สำเร็จ")) {
+    colorClass = "text-teal-400 font-medium";
+  } else if (message.includes("ℹ️") || message.includes("กำลังเริ่มต้น") || message.includes("กำลัง")) {
+    colorClass = "text-teal-500/90";
+  }
+
+  return (
+    <div className="flex gap-2">
+      {timestamp && <span className="text-slate-500 shrink-0 select-none font-mono">{timestamp}</span>}
+      <span className={colorClass}>{message}</span>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [archivedArticles, setArchivedArticles] = useState<Article[]>([]);
   const [newlySynced, setNewlySynced] = useState<Article[]>([]);
@@ -365,7 +488,7 @@ export default function Dashboard() {
         return (
           <h1
             key={idx}
-            className="text-3xl font-extrabold tracking-tight mt-10 mb-4 text-slate-100 font-sans border-b border-slate-800 pb-2"
+            className="text-2xl sm:text-3xl font-display font-bold tracking-tight mt-10 mb-4 text-slate-100 border-b border-slate-900/60 pb-3"
           >
             {para.replace(/^#\s+/, "")}
           </h1>
@@ -375,7 +498,7 @@ export default function Dashboard() {
         return (
           <h2
             key={idx}
-            className="text-2xl font-bold tracking-tight mt-8 mb-4 text-slate-100 font-sans"
+            className="text-xl sm:text-2xl font-display font-bold tracking-tight mt-8 mb-4 text-slate-100"
           >
             {para.replace(/^##\s+/, "")}
           </h2>
@@ -385,7 +508,7 @@ export default function Dashboard() {
         return (
           <h3
             key={idx}
-            className={`text-xl font-bold tracking-tight mt-8 mb-4 font-sans ${
+            className={`text-lg sm:text-xl font-display font-bold tracking-tight mt-6 mb-3 ${
               lang === "th" ? "text-teal-400" : "text-indigo-400"
             }`}
           >
@@ -397,19 +520,19 @@ export default function Dashboard() {
         return (
           <h4
             key={idx}
-            className="text-lg font-bold tracking-tight mt-6 mb-3 text-slate-200 font-sans"
+            className="text-base sm:text-lg font-display font-bold tracking-tight mt-6 mb-3 text-slate-200"
           >
             {para.replace(/^####\s+/, "")}
           </h4>
         );
       }
 
-      // 2. Blockquotes
+      // 2. Blockquotes (Gold-tinted Zen style)
       if (para.startsWith("> ")) {
         return (
           <blockquote
             key={idx}
-            className="border-l-4 border-teal-500/50 bg-slate-900/35 px-6 py-4 my-6 rounded-r-xl italic text-slate-300 leading-relaxed font-serif text-base"
+            className="border-l-2 border-amber-500/40 bg-[#0c1220]/25 px-6 py-4 my-6 rounded-r-xl italic text-slate-300 font-display text-sm sm:text-base leading-loose"
           >
             {para.replace(/^>\s+/, "")}
           </blockquote>
@@ -421,7 +544,11 @@ export default function Dashboard() {
         return (
           <ul key={idx} className="list-disc pl-8 mb-3 space-y-1">
             <li
-              className={`text-base leading-relaxed ${lang === "en" ? "text-slate-300" : "text-slate-200"}`}
+              className={`text-sm sm:text-base ${
+                lang === "en" 
+                  ? "text-slate-350 font-sans leading-relaxed" 
+                  : "text-slate-200 font-display leading-loose"
+              }`}
             >
               {para.replace(/^-\s+/, "")}
             </li>
@@ -435,19 +562,21 @@ export default function Dashboard() {
         return (
           <pre
             key={idx}
-            className="bg-slate-950 border border-slate-800 p-4 rounded-xl overflow-x-auto text-xs font-mono my-5 text-teal-400/90 leading-relaxed"
+            className="bg-[#0c1220]/60 border border-slate-900 p-4 rounded-xl overflow-x-auto text-3xs font-mono my-5 text-teal-400/90 leading-relaxed"
           >
             <code>{codeText}</code>
           </pre>
         );
       }
 
-      // 5. Standard Paragraph
+      // 5. Standard Paragraph (Typographically tuned)
       return (
         <p
           key={idx}
-          className={`indent-8 leading-relaxed mb-4 text-base sm:text-lg ${
-            lang === "en" ? "text-slate-300" : "text-slate-200"
+          className={`indent-8 mb-5 text-sm sm:text-base ${
+            lang === "en" 
+              ? "text-slate-350 font-sans leading-relaxed" 
+              : "text-slate-100 font-display leading-loose"
           }`}
         >
           {para}
@@ -696,709 +825,515 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-teal-500 selection:text-slate-900">
-      {/* Background glow effects */}
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-20 right-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
+    <div className="min-h-screen bg-[#060913] text-[#f8fafc] font-sans selection:bg-teal-500 selection:text-slate-955 relative overflow-x-hidden">
+      {/* Background glow effects - soft and meditative */}
+      <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-teal-500/[0.03] rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[20%] right-[10%] w-[600px] h-[600px] bg-indigo-500/[0.03] rounded-full blur-[150px] pointer-events-none" />
 
       {/* Header */}
-      <header className="border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-teal-400 to-indigo-500 flex items-center justify-center shadow-lg shadow-teal-500/20">
-              <span className="font-bold text-slate-950 text-lg">M</span>
+      <header className="border-b border-slate-900/60 bg-[#060913]/70 backdrop-blur-md sticky top-0 z-50 transition-all duration-300">
+        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-[#0c1220] border border-slate-900 flex items-center justify-center shadow-md relative group overflow-hidden">
+              <div className="absolute inset-0 bg-teal-500/5 group-hover:bg-teal-500/10 transition-colors duration-500" />
+              <svg className="w-6 h-6 text-teal-400/90 relative z-10 transition-transform duration-700 group-hover:rotate-180" viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M50 82 C25 72, 20 45, 50 25 C80 45, 75 72, 50 82 Z" fill="currentColor" fillOpacity="0.1" />
+                <path d="M50 82 C35 77, 35 55, 50 45 C65 55, 65 77, 50 82 Z" fill="currentColor" fillOpacity="0.2" />
+              </svg>
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight bg-linear-to-r from-teal-300 to-indigo-200 bg-clip-text text-transparent">
-                Minghui Scraper & Translator
+              <h1 className="text-lg sm:text-xl font-display font-bold tracking-wide text-slate-100 flex items-center gap-2">
+                <span>MINGHUI INSIGHTS</span>
+                <span className="text-2xs font-mono px-2 py-0.5 rounded-md bg-teal-500/10 text-teal-400 border border-teal-500/15 uppercase font-medium tracking-widest">TH</span>
               </h1>
-              <p className="text-xs text-slate-400">
-                ระบบดึงและแปลบทความฝึกปฏิบัติสมาธิ (อังกฤษ ➔ ไทย)
+              <p className="text-3xs sm:text-2xs text-slate-455 font-sans tracking-wide">
+                ระบบสืบค้นข้อมูลและแปลถอดความบทความสัจธรรมธรรมปฏิบัติฝึกสมาธิ
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-medium text-slate-300 ring-1 ring-inset ring-slate-800">
-              Vercel Deployed
+          
+          <div className="flex items-center gap-3">
+            {googleIdToken && (
+              <div className="hidden sm:flex items-center gap-2 bg-[#0c1220]/60 border border-slate-900 px-3.5 py-1.5 rounded-xl text-3xs font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-opacity" />
+                <span className="text-slate-350 max-w-[140px] truncate">{userEmail}</span>
+              </div>
+            )}
+            <span className="inline-flex items-center rounded-xl bg-slate-900/80 px-3 py-1.5 text-3xs font-mono font-medium text-slate-455 border border-slate-850">
+              SECURE DRIVE SYNC
             </span>
           </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8 sm:px-6 lg:px-8 relative z-10">
-        {/* Top Control Panel */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="md:col-span-1 bg-slate-900/60 border border-slate-800/60 rounded-2xl p-6 backdrop-blur-sm flex flex-col justify-between shadow-xl relative z-20">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-200 mb-2">
-                ควบคุมระบบ
-              </h2>
-              <p className="text-sm text-slate-400 mb-6">
-                เริ่มการดึงข้อมูลจาก en.minghui.org หมวด Cultivation Insights
-                แปลเป็นภาษาไทยด้วย Gemini และเก็บข้อมูลลง Google Drive
-              </p>
-            </div>
-
-            <div className="space-y-2 mb-6 relative" ref={calendarRef}>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                เลือกกรองตามวันที่แปล (เลือกได้)
-              </label>
-
-              {/* Trigger Button */}
-              <button
-                type="button"
-                onClick={() => !isSyncing && setShowCalendar(!showCalendar)}
-                disabled={isSyncing}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-300 hover:border-slate-755 hover:border-slate-700/60 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all flex items-center justify-between group disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <div className="flex items-center gap-2.5">
-                  <svg
-                    className="w-4 h-4 text-slate-400 group-hover:text-teal-400 transition-colors"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
-                  <span
-                    className={
-                      selectedDate
-                        ? "text-teal-300 font-semibold"
-                        : "text-slate-500"
-                    }
-                  >
-                    {selectedDate
-                      ? formatThaiDateShort(selectedDate)
-                      : "ทั้งหมด (กรองตามวันที่)"}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  {selectedDate && (
-                    <span
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedDate("");
-                      }}
-                      className="p-1 rounded-md hover:bg-slate-900 text-slate-500 hover:text-slate-300 text-xs transition-colors"
-                    >
-                      ล้างค่า
-                    </span>
-                  )}
-                  <svg
-                    className={`w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-transform duration-200 ${showCalendar ? "rotate-180" : ""}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2.5"
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </div>
-              </button>
-
-              {/* Calendar Popover */}
-              {showCalendar && (
-                <div className="absolute top-[105%] left-0 w-[290px] bg-slate-900/98 border border-slate-800 rounded-2xl p-4 shadow-2xl backdrop-blur-md z-30 animate-fade-in flex flex-col space-y-4">
-                  {/* Month Navigation */}
-                  <div className="flex justify-between items-center">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setViewDate(
-                          new Date(
-                            viewDate.getFullYear(),
-                            viewDate.getMonth() - 1,
-                            1,
-                          ),
-                        )
-                      }
-                      className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2.5"
-                          d="M15 19l-7-7 7-7"
-                        />
-                      </svg>
-                    </button>
-                    <span className="text-sm font-semibold text-slate-200 font-sans">
-                      {monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setViewDate(
-                          new Date(
-                            viewDate.getFullYear(),
-                            viewDate.getMonth() + 1,
-                            1,
-                          ),
-                        )
-                      }
-                      className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2.5"
-                          d="M9 5l7 7-7 7"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-
-                  {/* Days of Week Header */}
-                  <div className="grid grid-cols-7 gap-1 text-center">
-                    {daysOfWeek.map((day, idx) => (
-                      <span
-                        key={idx}
-                        className={`text-xs font-bold font-sans ${idx === 0 || idx === 6 ? "text-slate-500" : "text-slate-400"}`}
-                      >
-                        {day}
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* Calendar Grid */}
-                  <div className="grid grid-cols-7 gap-1.5">
-                    {generateCalendarDays().map((item, idx) => {
-                      const isSelected = selectedDate === item.dateStr;
-                      const isToday =
-                        formatDateToString(new Date()) === item.dateStr;
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            setSelectedDate(item.dateStr);
-                            setShowCalendar(false);
-                          }}
-                          className={`h-7 w-7 rounded-lg flex items-center justify-center text-xs font-semibold font-mono transition-all ${
-                            !item.isCurrentMonth
-                              ? "text-slate-700 hover:bg-slate-850 hover:text-slate-500"
-                              : isSelected
-                                ? "bg-linear-to-tr from-teal-500 to-emerald-400 text-slate-950 font-bold shadow-md shadow-teal-500/25 scale-105"
-                                : isToday
-                                  ? "border border-teal-500/30 text-teal-400 hover:bg-slate-800"
-                                  : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-                          }`}
-                        >
-                          {item.day}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Calendar Footer Shortcuts */}
-                  <div className="border-t border-slate-800 pt-3 flex justify-between items-center text-xs">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const todayStr = formatDateToString(new Date());
-                        setSelectedDate(todayStr);
-                        setViewDate(new Date());
-                        setShowCalendar(false);
-                      }}
-                      className="text-teal-400 hover:text-teal-300 font-semibold"
-                    >
-                      วันนี้
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedDate("");
-                        setShowCalendar(false);
-                      }}
-                      className="text-slate-500 hover:text-slate-300"
-                    >
-                      ล้างตัวกรอง
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {!googleIdToken ? (
-              <div className="flex flex-col items-center justify-center p-5 bg-slate-900/30 border border-slate-800 rounded-2xl space-y-3 shadow-inner">
-                <span className="text-xs text-slate-400 font-medium font-sans">
-                  ลงชื่อเข้าใช้ Google เพื่อจัดการระบบ
-                </span>
-                <div
-                  id="google-signin-btn"
-                  className="w-full flex justify-center py-1"
-                />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center bg-slate-900/50 border border-slate-800/80 px-4 py-3 rounded-2xl text-xs">
-                  <div className="flex items-center gap-2 truncate">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-slate-300 font-mono font-semibold truncate max-w-[150px] sm:max-w-xs">
-                      {userEmail}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleSignOut}
-                    className="text-rose-400 hover:text-rose-300 font-semibold cursor-pointer transition-colors px-2 py-1 rounded-lg hover:bg-rose-500/10"
-                  >
-                    ออกจากระบบ
-                  </button>
-                </div>
-
-                {/* Hidden container to keep script happy */}
-                <div id="google-signin-btn" className="hidden" />
-
-                {isSyncing ? (
-                  <div className="flex gap-2.5 w-full">
-                    <button
-                      disabled
-                      className="flex-1 py-3.5 px-4 rounded-xl font-semibold shadow-lg flex items-center justify-center gap-2 bg-slate-900 text-slate-500 cursor-not-allowed border border-slate-800/80"
-                    >
-                      <svg
-                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-slate-500"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                      กำลังรันระบบ...
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCancel}
-                      disabled={isCancelling}
-                      className={`px-5 py-3.5 rounded-xl font-semibold border transition-all duration-300 active:scale-95 ${
-                        isCancelling
-                          ? "bg-rose-500/10 border-rose-500/20 text-rose-500/50 cursor-not-allowed"
-                          : "bg-rose-500/20 hover:bg-rose-500/30 border-rose-500/30 text-rose-300 hover:text-rose-100 shadow-lg shadow-rose-500/5 cursor-pointer"
-                      }`}
-                    >
-                      {isCancelling ? "กำลังยกเลิก..." : "ยกเลิก"}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleSync}
-                    className="w-full py-3.5 px-4 rounded-xl font-semibold shadow-lg transition-all duration-300 flex items-center justify-center gap-2 bg-linear-to-r from-teal-500 to-emerald-400 text-slate-950 hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 shadow-teal-500/10"
-                  >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      viewBox="0 0 24 24"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
-                      />
-                    </svg>
-                    Fetch บทความใหม่
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Console / Log Terminal */}
-          <div className="md:col-span-2 bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden flex flex-col h-[280px] shadow-2xl">
-            <div className="bg-slate-900 px-4 py-2 border-b border-slate-800 flex justify-between items-center">
-              <div className="flex gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-rose-500/80" />
-                <span className="w-3 h-3 rounded-full bg-amber-500/80" />
-                <span className="w-3 h-3 rounded-full bg-emerald-500/80" />
-              </div>
-              <span className="text-xs text-slate-500 font-mono">
-                live_logger.sh
-              </span>
-            </div>
-
-            <div className="p-4 flex-1 overflow-y-auto font-mono text-xs text-teal-400/90 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800">
-              {logs.length === 0 ? (
-                <div className="text-slate-600 italic">
-                  กดปุ่ม &quot;Fetch บทความใหม่&quot; เพื่อเริ่มต้นทำกระบวนการ...
-                </div>
-              ) : (
-                logs.map((log, idx) => (
-                  <div
-                    key={idx}
-                    className="leading-relaxed whitespace-pre-wrap"
-                  >
-                    {log}
-                  </div>
-                ))
-              )}
-              <div ref={logEndRef} />
-            </div>
-
-            {/* Progress Bar */}
-            {isSyncing && (
-              <div className="bg-slate-900 border-t border-slate-800 px-4 py-3">
-                <div className="flex justify-between items-center text-xs text-slate-400 mb-1.5">
-                  <span className="truncate max-w-[80%] font-medium">
-                    {statusMessage}
-                  </span>
-                  <span className="font-mono text-teal-400">
-                    {progressPercent}%
-                  </span>
-                </div>
-                <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
-                  <div
-                    className="bg-linear-to-r from-teal-400 to-indigo-500 h-full transition-all duration-300"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
+      <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 relative z-10">
+        
         {/* Sync Summary Notification */}
         {newCount !== null && (
           <div
-            className={`mb-6 p-4 rounded-xl border flex items-center justify-between animate-fade-in ${
+            className={`mb-6 p-4 rounded-2xl border flex items-center justify-between animate-fade-in ${
               newCount > 0
                 ? "bg-teal-500/10 border-teal-500/20 text-teal-300"
-                : "bg-slate-900/40 border-slate-800 text-slate-400"
+                : "bg-slate-900/40 border-slate-900 text-slate-455"
             }`}
           >
-            <div className="flex items-center gap-2">
-              <span className="flex h-2.5 w-2.5 relative">
-                <span
-                  className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${newCount > 0 ? "bg-teal-400" : "bg-slate-600"}`}
-                ></span>
-                <span
-                  className={`relative inline-flex rounded-full h-2.5 w-2.5 ${newCount > 0 ? "bg-teal-500" : "bg-slate-600"}`}
-                ></span>
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-2 w-2 relative">
+                {newCount > 0 && <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-teal-400" />}
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${newCount > 0 ? "bg-teal-500" : "bg-slate-650"}`} />
               </span>
-              <p className="text-sm font-medium">
-                พบบทความใหม่{" "}
-                <span className="font-bold underline">{newCount}</span> รายการ
+              <p className="text-xs font-semibold font-sans">
+                พบบทความใหม่สำหรับวันนี้ใน Minghui.org: <span className="font-mono font-bold underline bg-teal-500/10 px-1.5 py-0.5 rounded text-teal-400 ml-1">{newCount}</span> รายการ
               </p>
             </div>
             {newCount > 0 && isSyncing && (
-              <p className="text-xs text-slate-400 animate-pulse">
-                กำลังซิงค์เข้าคลังบทความ...
+              <p className="text-3xs text-slate-500 animate-pulse uppercase tracking-wider font-mono">
+                กำลังซิงค์เข้าคลังระบบจัดเก็บ...
               </p>
             )}
           </div>
         )}
 
-        {/* Tab Navigation */}
-        <div className="border-b border-slate-800/80 mb-6 flex justify-between items-end">
-          <div className="flex gap-4">
-            <button
-              onClick={() => setActiveTab("archived")}
-              className={`pb-3 font-semibold text-sm transition-all relative ${
-                activeTab === "archived"
-                  ? "text-teal-400"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              คลังบทความทั้งหมด ({archivedArticles.length})
-              {activeTab === "archived" && (
-                <span className="absolute bottom-0 left-0 w-full h-0.5 bg-teal-400 rounded-full" />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* LEFT COLUMN: ARCHIVE LEDGER */}
+          <section className="lg:col-span-4 flex flex-col space-y-4 lg:sticky lg:top-24 h-auto lg:h-[calc(100vh-140px)] min-h-[500px]">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">คลังบทความ</h2>
+                <p className="text-3xs text-slate-500 font-sans mt-0.5">Archive Library & Index Ledger</p>
+              </div>
+              {selectedDate && (
+                <span className="text-3xs font-mono bg-teal-500/10 text-teal-400 border border-teal-500/15 px-2.5 py-1 rounded-lg flex items-center gap-1.5 animate-fade-in">
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
+                  {formatThaiDateShort(selectedDate)}
+                </span>
               )}
-            </button>
-            <button
-              onClick={() => setActiveTab("newly-synced")}
-              className={`pb-3 font-semibold text-sm transition-all relative ${
-                activeTab === "newly-synced"
-                  ? "text-teal-400"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              แปลใหม่รอบนี้ ({newlySynced.length})
-              {activeTab === "newly-synced" && (
-                <span className="absolute bottom-0 left-0 w-full h-0.5 bg-teal-400 rounded-full" />
-              )}
-            </button>
-          </div>
-        </div>
+            </div>
 
-        {/* Articles List container */}
-        <div className="space-y-4">
-          {loadingInitial && activeTab === "archived" ? (
-            <div className="py-20 text-center text-slate-500 space-y-3">
-              <svg
-                className="animate-spin mx-auto h-8 w-8 text-teal-500"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                ></circle>
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
-              <p className="text-sm">กำลังโหลดคลังบทความจาก Google Drive...</p>
-            </div>
-          ) : activeTab === "archived" && archivedArticles.length === 0 ? (
-            <div className="py-20 text-center text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-900/10">
-              <svg
-                className="w-12 h-12 mx-auto text-slate-600 mb-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="1.5"
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              <p className="text-sm">
-                ยังไม่มีบทความในคลัง กดดึงบทความใหม่ด้านบนเพื่อเริ่มต้น
-              </p>
-            </div>
-          ) : activeTab === "archived" &&
-            selectedDate &&
-            archivedArticles.filter((a) => a.date === selectedDate).length ===
-              0 ? (
-            <div className="py-20 text-center text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-900/10">
-              <svg
-                className="w-12 h-12 mx-auto text-slate-600 mb-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="1.5"
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
-              <p className="text-sm mb-3">
-                ไม่พบบทความที่บันทึกไว้ ณ วันที่ {selectedDate}
-              </p>
+            {/* Tab Toggles */}
+            <div className="flex bg-[#0c1220]/60 p-1 border border-slate-900 rounded-xl">
               <button
-                onClick={() => setSelectedDate("")}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
+                onClick={() => setActiveTab("archived")}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  activeTab === "archived"
+                    ? "bg-[#14b8a6]/10 text-teal-400 font-bold border border-teal-500/15"
+                    : "text-slate-455 hover:text-slate-200"
+                }`}
               >
-                ล้างตัวกรองวันที่
+                ทั้งหมด ({archivedArticles.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("newly-synced")}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  activeTab === "newly-synced"
+                    ? "bg-[#14b8a6]/10 text-teal-400 font-bold border border-teal-500/15"
+                    : "text-slate-455 hover:text-slate-200"
+                }`}
+              >
+                แปลรอบนี้ ({newlySynced.length})
               </button>
             </div>
-          ) : activeTab === "newly-synced" && newlySynced.length === 0 ? (
-            <div className="py-20 text-center text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-900/10">
-              <svg
-                className="w-12 h-12 mx-auto text-slate-600 mb-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="1.5"
-                  d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
-                />
-              </svg>
-              <p className="text-sm">
-                ยังไม่มีการซิงค์และแปลบทความใหม่ในรอบนี้
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {(activeTab === "archived"
-                ? selectedDate
-                  ? archivedArticles.filter((a) => a.date === selectedDate)
-                  : archivedArticles
-                : newlySynced
-              ).map((article, idx) => (
-                <div
-                  key={idx}
-                  className="bg-slate-900/40 border border-slate-800/80 hover:border-slate-700/80 rounded-2xl p-5 backdrop-blur-sm transition-all duration-300 hover:shadow-xl hover:shadow-teal-500/[0.02] group"
-                >
-                  <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                    <div className="space-y-1.5 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center rounded-md bg-slate-800 px-2 py-0.5 text-xs font-semibold text-teal-400 ring-1 ring-inset ring-teal-500/15 font-mono">
-                          {article.date}
-                        </span>
-                        {article.filePath && (
-                          <span className="inline-flex items-center rounded-md bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-400 ring-1 ring-inset ring-indigo-500/20 font-mono">
-                            {article.filePath}
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="text-base font-bold text-slate-100 group-hover:text-teal-300 transition-colors leading-snug">
-                        {article.title_th}
-                      </h3>
-                      <p className="text-xs text-slate-400 leading-normal">
-                        English:{" "}
-                        <span className="italic">{article.title_en}</span>
-                      </p>
-                    </div>
 
-                    <div className="flex flex-wrap gap-2 self-stretch sm:self-center">
-                      {article.filePath && (
-                        <button
-                          onClick={() => openArticle(article.filePath!)}
-                          className="inline-flex items-center justify-center gap-1.5 text-xs text-teal-400 hover:text-slate-950 border border-teal-500/20 hover:bg-teal-400 bg-teal-500/5 px-3.5 py-2.5 rounded-xl transition-all duration-300 font-semibold"
-                        >
-                          <span>อ่านบทความ</span>
-                          <svg
-                            className="w-3.5 h-3.5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2.5"
-                              d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                            />
-                          </svg>
-                        </button>
-                      )}
-                      <a
-                        href={article.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center gap-1 text-xs text-slate-400 hover:text-teal-400 border border-slate-800 hover:border-teal-500/30 bg-slate-950/45 px-3.5 py-2.5 rounded-xl transition-all duration-300"
-                      >
-                        <span>ลิงก์ต้นฉบับ</span>
-                        <svg
-                          className="w-3.5 h-3.5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2.5"
-                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                          />
-                        </svg>
-                      </a>
+            {/* Scrollable list of articles */}
+            <div className="flex-1 overflow-y-auto scrollbar-thin pr-1 space-y-3 pb-6">
+              {loadingInitial && activeTab === "archived" ? (
+                <div className="h-[250px] flex flex-col items-center justify-center text-slate-550 space-y-3">
+                  <svg className="animate-spin h-6 w-6 text-teal-500/70" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span className="text-3xs uppercase tracking-wider text-slate-555 font-mono">กำลังเชื่อมต่อข้อมูลคลัง...</span>
+                </div>
+              ) : activeTab === "archived" && archivedArticles.length === 0 ? (
+                <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
+                  <span className="text-xs font-sans">ไม่พบบทความใดๆ ในระบบคลังข้อมูล</span>
+                </div>
+              ) : activeTab === "archived" && selectedDate && archivedArticles.filter((a) => a.date === selectedDate).length === 0 ? (
+                <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
+                  <span className="text-xs font-sans">ไม่พบบทความสำหรับวันที่ระบุ</span>
+                </div>
+              ) : activeTab === "newly-synced" && newlySynced.length === 0 ? (
+                <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
+                  <span className="text-xs font-sans">ยังไม่มีบทความที่ดึงใหม่ในเซสชันนี้</span>
+                </div>
+              ) : (
+                (activeTab === "archived"
+                  ? selectedDate
+                    ? archivedArticles.filter((a) => a.date === selectedDate)
+                    : archivedArticles
+                  : newlySynced
+                ).map((article: Article, idx: number) => (
+                  <div
+                    key={idx}
+                    onClick={() => article.filePath && openArticle(article.filePath)}
+                    className="p-4 rounded-xl bg-[#0c1220]/30 border border-slate-900 hover:border-teal-500/30 hover:bg-[#0c1220]/60 transition-all duration-300 group cursor-pointer shadow-xs active:scale-[0.99] animate-fade-in"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-3xs font-mono bg-slate-900/80 px-2 py-0.5 rounded text-slate-450 border border-slate-850">
+                        {article.date}
+                      </span>
+                      <svg className="w-3.5 h-3.5 text-slate-600 group-hover:text-teal-400 transition-colors" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                      </svg>
                     </div>
+                    <h3 className="text-xs font-display font-semibold text-slate-200 leading-relaxed group-hover:text-slate-100 transition-colors line-clamp-2">
+                      {article.title_th}
+                    </h3>
+                    <p className="text-3xs text-slate-500 font-sans line-clamp-1 mt-1.5 italic group-hover:text-slate-450 transition-colors">
+                      {article.title_en}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          {/* MIDDLE COLUMN: WORKSPACE CONSOLE */}
+          <section className="lg:col-span-5 space-y-6">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">แผงคอนโซลควบคุม</h2>
+              <p className="text-3xs text-slate-500 font-sans mt-0.5">Workspace Operations & Execution Logs</p>
+            </div>
+
+            {/* Statistics Row */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 rounded-2xl bg-[#0c1220]/20 border border-slate-900 backdrop-blur-xs">
+                <span className="text-3xs uppercase tracking-wider text-slate-500 font-mono">คลังบทความทั้งหมด</span>
+                <p className="text-2xl font-mono font-bold text-teal-400 mt-1">{archivedArticles.length}</p>
+                <span className="text-4xs text-slate-500 font-sans mt-0.5 block">ใน Google Drive Index</span>
+              </div>
+              <div className="p-4 rounded-2xl bg-[#0c1220]/20 border border-slate-900 backdrop-blur-xs">
+                <span className="text-3xs uppercase tracking-wider text-slate-500 font-mono">แปลสำเร็จรอบนี้</span>
+                <p className="text-2xl font-mono font-bold text-[#fda4af] mt-1">{newlySynced.length}</p>
+                <span className="text-4xs text-slate-500 font-sans mt-0.5 block">ในเซสชันการทำงานปัจจุบัน</span>
+              </div>
+            </div>
+
+            {/* Console / Log Terminal */}
+            <div className="bg-[#060913] border border-slate-900 rounded-2xl overflow-hidden flex flex-col h-[400px] shadow-2xl relative">
+              {/* Mac window header */}
+              <div className="bg-[#0c1220]/85 px-4 py-2.5 border-b border-slate-900/60 flex justify-between items-center backdrop-blur-sm">
+                <div className="flex gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500/40 border border-rose-500/20" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500/40 border border-amber-500/20" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/40 border border-emerald-500/20" />
+                </div>
+                <span className="text-3xs text-slate-500 font-mono tracking-wide uppercase">live_operation.sh</span>
+                <span className="w-8" />
+              </div>
+
+              <div className="p-4 flex-1 overflow-y-auto font-mono text-3xs space-y-2 scrollbar-thin scrollbar-thumb-slate-800 bg-[#060913]">
+                {logs.length === 0 ? (
+                  <div className="text-slate-655 italic font-sans">
+                    รอเริ่มการซิงค์ข้อมูล... กรุณากดปุ่ม &quot;ซิงค์ข้อมูลระบบ&quot; ในแผงควบคุมขวา
+                  </div>
+                ) : (
+                  logs.map((log, idx) => (
+                    <div key={idx} className="leading-relaxed">
+                      {formatLogLine(log)}
+                    </div>
+                  ))
+                )}
+                <div ref={logEndRef} />
+              </div>
+
+              {/* Progress Bar */}
+              {isSyncing && (
+                <div className="bg-[#0c1220]/60 border-t border-slate-900 px-4 py-3.5 backdrop-blur-xs">
+                  <div className="flex justify-between items-center text-3xs mb-2">
+                    <span className="truncate max-w-[80%] text-slate-455 font-sans tracking-wide">
+                      {statusMessage}
+                    </span>
+                    <span className="font-mono text-teal-400 font-bold">
+                      {progressPercent}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-[#060913] rounded-full h-1 border border-slate-900 overflow-hidden">
+                    <div
+                      className="bg-linear-to-r from-teal-400 via-emerald-400 to-indigo-500 h-full transition-all duration-300"
+                      style={{ width: `${progressPercent}%` }}
+                    />
                   </div>
                 </div>
-              ))}
+              )}
             </div>
-          )}
+          </section>
+
+          {/* RIGHT COLUMN: DESK CONTROLS */}
+          <section className="lg:col-span-3 space-y-6">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">ศูนย์ควบคุมการซิงค์</h2>
+              <p className="text-3xs text-slate-500 font-sans mt-0.5">Control Panel & Synchronizer</p>
+            </div>
+
+            <div className="p-6 bg-[#0c1220]/30 border border-slate-900 rounded-2xl backdrop-blur-md flex flex-col items-center justify-between shadow-xl relative z-20">
+              
+              {/* Lotus Orbit Signature Component */}
+              <div className="py-2 w-full">
+                <LotusFlower active={isSyncing} progress={progressPercent} />
+              </div>
+
+              {/* System State Info Description */}
+              <div className="text-center w-full px-2 mb-6">
+                {!isSyncing ? (
+                  <p className="text-3xs text-slate-455 leading-relaxed font-sans">
+                    ระบบพร้อมสำหรับการเริ่มดึงข้อมูล (Scraping) แปลความด้วย AI (Gemini Translator) และนำเข้าบัญชีจัดเก็บ Google Drive ของระบบแบบเรียลไทม์
+                  </p>
+                ) : (
+                  <p className="text-3xs text-teal-400 animate-pulse font-mono uppercase tracking-widest font-bold">
+                    กำลังดึงและถอดความสัมพันธ์...
+                  </p>
+                )}
+              </div>
+
+              {/* Date Filter & Control Buttons */}
+              <div className="w-full space-y-4">
+                
+                {/* Calendar Trigger */}
+                <div className="space-y-1.5 relative w-full" ref={calendarRef}>
+                  <label className="block text-4xs font-bold text-slate-500 uppercase tracking-widest font-mono">
+                    เลือกตัวกรองวันที่ดึงข้อมูล
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => !isSyncing && setShowCalendar(!showCalendar)}
+                    disabled={isSyncing}
+                    className="w-full bg-[#060913] border border-slate-900 rounded-xl px-4 py-2.5 text-xs text-slate-350 hover:border-slate-800 focus:outline-none transition-all flex items-center justify-between group disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="w-3.5 h-3.5 text-slate-550 group-hover:text-teal-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span className={selectedDate ? "text-teal-400 font-semibold" : "text-slate-500 font-medium"}>
+                        {selectedDate ? formatThaiDateShort(selectedDate) : "ดึงทั้งหมด (ไม่มีกรอง)"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {selectedDate && (
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDate("");
+                          }}
+                          className="px-1.5 py-0.5 rounded-md hover:bg-slate-900 text-slate-500 hover:text-slate-350 text-4xs transition-colors"
+                        >
+                          ล้างค่า
+                        </span>
+                      )}
+                      <svg className={`w-3.5 h-3.5 text-slate-550 group-hover:text-slate-300 transition-transform duration-200 ${showCalendar ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </button>
+
+                  {/* Calendar Popover */}
+                  {showCalendar && (
+                    <div className="absolute top-[105%] right-0 w-[280px] bg-[#0c1220]/95 border border-slate-900 rounded-2xl p-4 shadow-2xl backdrop-blur-lg z-30 animate-fade-in flex flex-col space-y-4">
+                      <div className="flex justify-between items-center">
+                        <button
+                          type="button"
+                          onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}
+                          className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-450 hover:text-slate-200 transition-colors cursor-pointer"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+                          </svg>
+                        </button>
+                        <span className="text-xs font-semibold text-slate-200 font-sans">
+                          {monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}
+                          className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-450 hover:text-slate-200 transition-colors cursor-pointer"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-7 gap-1 text-center text-4xs font-semibold text-slate-505 uppercase tracking-widest font-mono">
+                        {daysOfWeek.map((day) => <div key={day}>{day}</div>)}
+                      </div>
+
+                      <div className="grid grid-cols-7 gap-1">
+                        {/* Calendar Grid Days */}
+                        {generateCalendarDays().map((item, idx) => {
+                          const isSel = selectedDate === item.dateStr;
+                          const isTod = formatDateToString(new Date()) === item.dateStr;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setSelectedDate(item.dateStr);
+                                setShowCalendar(false);
+                              }}
+                              className={`py-1 text-3xs rounded-md transition-colors cursor-pointer ${
+                                !item.isCurrentMonth
+                                  ? "text-slate-700 hover:bg-[#060913]"
+                                  : isSel
+                                    ? "bg-teal-500 text-slate-950 font-bold"
+                                    : isTod
+                                      ? "bg-[#060913] text-teal-400 border border-teal-500/20"
+                                      : "text-slate-350 hover:bg-[#060913]"
+                              }`}
+                            >
+                              {item.day}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="border-t border-slate-900 pt-3 flex justify-between items-center text-4xs font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDate(formatDateToString(new Date()));
+                            setShowCalendar(false);
+                          }}
+                          className="text-teal-400 hover:text-teal-350 transition-colors cursor-pointer"
+                        >
+                          วันนี้
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDate("");
+                            setShowCalendar(false);
+                          }}
+                          className="text-slate-500 hover:text-slate-350 transition-colors cursor-pointer"
+                        >
+                          ล้างตัวกรอง
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Authentication sync action buttons */}
+                {!googleIdToken ? (
+                  <div className="flex flex-col items-center justify-center p-4 bg-[#060913] border border-slate-900 rounded-2xl space-y-2.5 shadow-inner">
+                    <span className="text-3xs text-slate-500 font-medium text-center leading-normal font-sans">
+                      จำเป็นต้องลงชื่อเข้าบัญชีของเจ้าของสิทธิ์ระบบเพื่อซิงค์ข้อมูล
+                    </span>
+                    <div id="google-signin-btn" className="w-full flex justify-center py-1 scale-95" />
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between bg-[#060913] border border-slate-900 px-3.5 py-2.5 rounded-xl text-3xs">
+                      <div className="flex items-center gap-1.5 truncate max-w-[70%]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-opacity" />
+                        <span className="text-slate-350 font-mono truncate">{userEmail}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSignOut}
+                        className="text-rose-450 hover:text-rose-350 font-bold cursor-pointer transition-colors"
+                      >
+                        Sign Out
+                      </button>
+                    </div>
+
+                    {/* Hidden sign-in container */}
+                    <div id="google-signin-btn" className="hidden" />
+
+                    {isSyncing ? (
+                      <div className="flex gap-2 w-full">
+                        <button
+                          disabled
+                          className="flex-1 py-3 px-4 rounded-xl font-bold text-xs bg-slate-900 text-slate-550 border border-slate-900 flex items-center justify-center gap-2 cursor-not-allowed font-sans"
+                        >
+                          <svg className="animate-spin h-4 w-4 text-slate-550" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          กำลังซิงค์...
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancel}
+                          disabled={isCancelling}
+                          className={`px-4 py-3 rounded-xl font-bold text-xs border transition-all duration-300 active:scale-95 cursor-pointer font-sans ${
+                            isCancelling
+                              ? "bg-rose-500/10 border-rose-500/20 text-rose-500/40 cursor-not-allowed"
+                              : "bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/20 text-rose-400 hover:text-rose-200"
+                          }`}
+                        >
+                          {isCancelling ? "รอยกเลิก..." : "ยกเลิก"}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleSync}
+                        className="w-full py-3 px-4 rounded-xl font-bold text-xs shadow-lg transition-all duration-300 flex items-center justify-center gap-2 bg-teal-500 text-slate-950 hover:bg-teal-400 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-teal-500/15 font-sans"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                        </svg>
+                        ซิงค์ข้อมูลระบบ
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
         </div>
       </main>
 
-      {/* Reader Modal Overlay */}
+      {/* Immersive Zen Reader Modal Overlay */}
       {readingArticlePath && (
-        <div className="fixed inset-0 z-50 bg-slate-950/98 overflow-y-auto backdrop-blur-lg flex flex-col">
+        <div className="fixed inset-0 z-50 bg-[#060913]/98 overflow-y-auto backdrop-blur-xl flex flex-col animate-fade-in select-text">
           {/* Reader Header */}
-          <div className="sticky top-0 bg-slate-900/90 border-b border-slate-800 backdrop-blur-md z-10 px-4 py-4 sm:px-6 lg:px-8">
-            <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <div className="sticky top-0 bg-[#060913]/90 border-b border-slate-900/60 backdrop-blur-md z-10 px-4 py-3.5 sm:px-6 lg:px-8">
+            <div className="max-w-5xl mx-auto flex items-center justify-between font-sans">
+              
               <button
                 onClick={closeArticle}
-                className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors font-medium"
+                className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors font-semibold cursor-pointer"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2.5"
-                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                  />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                ย้อนกลับ
+                กลับหน้าหลัก
               </button>
 
               {articleContent && (
-                <div className="flex bg-slate-950 p-1 border border-slate-800 rounded-xl text-xs">
+                <div className="flex bg-[#060913] p-1 border border-slate-900 rounded-xl text-3xs font-mono">
                   <button
                     onClick={() => setReaderLanguage("th")}
-                    className={`px-3 py-1.5 rounded-lg transition-all font-semibold ${
+                    className={`px-3 py-1.5 rounded-lg transition-all font-semibold cursor-pointer ${
                       readerLanguage === "th"
-                        ? "bg-teal-500 text-slate-950"
-                        : "text-slate-400 hover:text-slate-200"
+                        ? "bg-teal-500 text-slate-950 font-bold"
+                        : "text-slate-455 hover:text-slate-200"
                     }`}
                   >
                     ภาษาไทย
                   </button>
                   <button
                     onClick={() => setReaderLanguage("en")}
-                    className={`px-3 py-1.5 rounded-lg transition-all font-semibold ${
+                    className={`px-3 py-1.5 rounded-lg transition-all font-semibold cursor-pointer ${
                       readerLanguage === "en"
-                        ? "bg-teal-500 text-slate-950"
-                        : "text-slate-400 hover:text-slate-200"
+                        ? "bg-teal-500 text-slate-955 font-bold"
+                        : "text-slate-455 hover:text-slate-200"
                     }`}
                   >
                     English
                   </button>
                   <button
                     onClick={() => setReaderLanguage("both")}
-                    className={`px-3 py-1.5 rounded-lg transition-all font-semibold ${
+                    className={`px-3 py-1.5 rounded-lg transition-all font-semibold cursor-pointer ${
                       readerLanguage === "both"
-                        ? "bg-teal-500 text-slate-950"
-                        : "text-slate-400 hover:text-slate-200"
+                        ? "bg-teal-500 text-slate-955 font-bold"
+                        : "text-slate-455 hover:text-slate-200"
                     }`}
                   >
-                    อ่านควบคู่ (สองภาษา)
+                    อ่านควบคู่
                   </button>
                 </div>
               )}
@@ -1406,86 +1341,56 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={handleCopyShareLink}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-950 border border-slate-800 text-teal-400 hover:text-teal-300 hover:bg-slate-900 transition-all duration-200 shadow-md shadow-teal-500/5 active:scale-95"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-2xs font-semibold bg-[#0c1220] border border-slate-900 text-teal-400 hover:text-teal-300 hover:bg-[#0c1220]/80 transition-all duration-200 active:scale-95 cursor-pointer"
               >
                 {copied ? (
                   <>
-                    <svg
-                      className="w-3.5 h-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2.5"
-                        d="M5 13l4 4L19 7"
-                      />
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
                     </svg>
-                    <span>คัดลอกสำเร็จ!</span>
+                    <span>คัดลอกแล้ว!</span>
                   </>
                 ) : (
                   <>
-                    <svg
-                      className="w-3.5 h-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      viewBox="0 0 24 24"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"
-                      />
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
                     </svg>
-                    <span>คัดลอกลิงก์</span>
+                    <span>ลิงก์สำหรับแชร์</span>
                   </>
                 )}
               </button>
             </div>
           </div>
 
-          {/* Reader Content */}
-          <div className="flex-1 max-w-5xl w-full mx-auto px-4 py-8 sm:px-6 lg:px-8">
+          {/* Reader Content Container */}
+          <div className="flex-1 max-w-5xl w-full mx-auto px-4 py-8 sm:px-6 lg:px-8 relative">
+            
+            {/* Watermark Lotus Flower in background */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02] select-none">
+              <svg className="w-[500px] h-[500px]" viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="1">
+                <path d="M50 80 C15 70, 10 40, 50 20 C90 40, 85 70, 50 80 Z" />
+                <path d="M50 80 C20 75, 20 45, 50 35 C80 45, 80 75, 50 80 Z" />
+                <path d="M50 80 C32 75, 32 50, 50 42 C68 50, 68 75, 50 80 Z" />
+              </svg>
+            </div>
+
             {isLoadingArticle ? (
-              <div className="h-[60vh] flex flex-col items-center justify-center text-slate-500 space-y-4">
-                <svg
-                  className="animate-spin h-10 w-10 text-teal-500"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
+              <div className="h-[60vh] flex flex-col items-center justify-center text-slate-550 space-y-4 relative z-10 font-sans">
+                <svg className="animate-spin h-8 w-8 text-teal-500" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                <p className="text-sm">
-                  กำลังโหลดเนื้อหาบทความจาก Google Drive...
-                </p>
+                <p className="text-[10px] uppercase tracking-wider text-slate-450 font-mono">กำลังโหลดเนื้อหาจาก Drive...</p>
               </div>
             ) : articleContent ? (
-              <article className="space-y-8">
-                {/* Metadata header */}
-                <div className="border-b border-slate-800 pb-6 space-y-3">
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="bg-teal-500/10 text-teal-400 px-2.5 py-0.5 rounded-md font-semibold font-mono border border-teal-500/15">
+              <article className="space-y-8 relative z-10">
+                {/* Metadata Header */}
+                <div className="border-b border-slate-900/60 pb-6 space-y-4 font-sans">
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono font-semibold">
+                    <span className="bg-amber-500/10 text-amber-400 px-2.5 py-0.5 rounded-md border border-amber-500/15">
                       {articleContent.published_date}
                     </span>
-                    <span className="bg-indigo-500/10 text-indigo-400 px-2.5 py-0.5 rounded-md font-semibold font-mono border border-indigo-500/15">
+                    <span className="bg-indigo-500/10 text-indigo-400 px-2.5 py-0.5 rounded-md border border-indigo-500/15">
                       {articleContent.category}
                     </span>
                     <a
