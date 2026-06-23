@@ -21,7 +21,16 @@ export async function verifyGoogleToken(idToken: string): Promise<string | null>
 }
 
 export async function isAuthorized(req: Request): Promise<boolean> {
-  // Check X-Google-ID-Token header (custom header sent from our UI)
+  // 1. Check Cron / Bearer token (for Vercel Cron)
+  const authHeader = req.headers.get('Authorization');
+  if (authHeader) {
+    const token = authHeader.replace('Bearer ', '').trim();
+    if (process.env.CRON_SECRET && token === process.env.CRON_SECRET) {
+      return true;
+    }
+  }
+
+  // 2. Check X-Google-ID-Token header (custom header sent from our UI)
   const googleToken = req.headers.get('X-Google-ID-Token');
   if (googleToken) {
     const email = await verifyGoogleToken(googleToken);
