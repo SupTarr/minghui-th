@@ -137,8 +137,9 @@ async function withDriveWriteRetry<T>(
       // backoff capped at 8s with jitter to avoid a thundering herd. gaxios 7's
       // response.headers is a Web `Headers` instance, so it must be read with
       // .get() — bracket access returns undefined.
-      const retryAfterRaw = (err as { response?: { headers?: Headers } })?.response
-        ?.headers?.get?.("retry-after");
+      const retryAfterRaw = (
+        err as { response?: { headers?: Headers } }
+      )?.response?.headers?.get?.("retry-after");
       const retryAfter = Number(retryAfterRaw);
       const backoff =
         Number.isFinite(retryAfter) && retryAfter > 0
@@ -236,35 +237,38 @@ export async function createFolder(
   const inflight = inflightFolderCreates.get(key);
   if (inflight) return inflight;
 
-  const promise = withDriveWriteRetry(`createFolder(${folderName})`, async () => {
-    const drive = initDrive();
+  const promise = withDriveWriteRetry(
+    `createFolder(${folderName})`,
+    async () => {
+      const drive = initDrive();
 
-    // Search for existing folder. On a retry after a transient create failure
-    // this re-list finds the folder we just made, so we return it instead of
-    // creating a duplicate.
-    const query = `mimeType = 'application/vnd.google-apps.folder' and name = '${escapeDriveQueryValue(folderName)}' and '${parentId}' in parents and trashed = false`;
-    const listRes = await drive.files.list(
-      getListParams(query, "files(id, name)"),
-    );
+      // Search for existing folder. On a retry after a transient create failure
+      // this re-list finds the folder we just made, so we return it instead of
+      // creating a duplicate.
+      const query = `mimeType = 'application/vnd.google-apps.folder' and name = '${escapeDriveQueryValue(folderName)}' and '${parentId}' in parents and trashed = false`;
+      const listRes = await drive.files.list(
+        getListParams(query, "files(id, name)"),
+      );
 
-    const files = listRes.data.files;
-    if (files && files.length > 0) {
-      return files[0].id!;
-    }
+      const files = listRes.data.files;
+      if (files && files.length > 0) {
+        return files[0].id!;
+      }
 
-    // Create new folder
-    const folder = await drive.files.create({
-      supportsAllDrives: true,
-      requestBody: {
-        name: folderName,
-        mimeType: "application/vnd.google-apps.folder",
-        parents: [parentId],
-      },
-      fields: "id",
-    });
+      // Create new folder
+      const folder = await drive.files.create({
+        supportsAllDrives: true,
+        requestBody: {
+          name: folderName,
+          mimeType: "application/vnd.google-apps.folder",
+          parents: [parentId],
+        },
+        fields: "id",
+      });
 
-    return folder.data.id!;
-  });
+      return folder.data.id!;
+    },
+  );
 
   inflightFolderCreates.set(key, promise);
   try {

@@ -570,7 +570,8 @@ export default function Dashboard() {
           syncedArticle,
           ...prev.filter(
             (a) =>
-              a.filePath !== syncedArticle.filePath && a.url !== syncedArticle.url,
+              a.filePath !== syncedArticle.filePath &&
+              a.url !== syncedArticle.url,
           ),
         ];
         setNewlySynced(dedupePrepend);

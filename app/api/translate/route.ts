@@ -72,7 +72,10 @@ Return JSON only matching this schema:
   "content_th": "Translated Thai Content"
 }
 Keep proper nouns (Falun Dafa, Minghui, etc.) unchanged.
-Maintain all markdown formatting (such as headings starting with #, ##, ###, bullet points starting with -, blockquotes starting with >) exactly as they are in the translation (translate the text, keep the markdown syntax prefix).
+Maintain ALL markdown formatting exactly, translating only the human-readable text:
+- Block prefixes — headings (#, ##, ###, ####), bullet points (-), blockquotes (>) — keep the prefix on every line (a multi-line blockquote keeps "> " on each line).
+- Inline emphasis — **bold** and *italic* — keep the * / ** markers wrapped around the translated words.
+- Links — [text](url) — translate the bracketed text but keep the (url) byte-for-byte unchanged.
 
 Article title: ${title_en}
 Article content: ${content_en}`;
