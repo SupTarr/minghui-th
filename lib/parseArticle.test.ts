@@ -138,7 +138,9 @@ describe("parseArticleHtml — Master Li jingwen template", () => {
   it("falls back to h1.cBBlue + .jingwenNei when the standard template is absent", () => {
     const { title_en, content_en } = parseArticleHtml(JINGWEN);
     expect(title_en).toBe("How Humankind Came To Be");
-    expect(content_en).toContain("The Creator cherishes all of the heavenly beings.");
+    expect(content_en).toContain(
+      "The Creator cherishes all of the heavenly beings.",
+    );
     expect(content_en).toContain("New Year's would normally be a time");
   });
 });
