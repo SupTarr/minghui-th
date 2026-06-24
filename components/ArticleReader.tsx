@@ -1,7 +1,52 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import type { ArticleDetails } from "@/components/types";
+
+// Parses inline markdown — **bold**, *italic*, [text](url) — plus \n line breaks
+// within a block, returning React nodes. The block-level parser (renderContent)
+// strips the block prefix, then hands the remainder here.
+function renderInline(text: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  const re =
+    /\*\*([^*]+)\*\*|\*([^*\n]+)\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  const pushText = (s: string) => {
+    s.split("\n").forEach((part, i) => {
+      if (i > 0) out.push(<br key={`br${key++}`} />);
+      if (part) out.push(part);
+    });
+  };
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) pushText(text.slice(last, m.index));
+    if (m[1] !== undefined) {
+      out.push(
+        <strong key={`b${key++}`} className="font-semibold text-slate-100">
+          {m[1]}
+        </strong>,
+      );
+    } else if (m[2] !== undefined) {
+      out.push(<em key={`i${key++}`}>{m[2]}</em>);
+    } else {
+      out.push(
+        <a
+          key={`a${key++}`}
+          href={m[4]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-indigo-400 underline decoration-dotted underline-offset-2 hover:text-indigo-300"
+        >
+          {renderInline(m[3])}
+        </a>,
+      );
+    }
+    last = re.lastIndex;
+  }
+  if (last < text.length) pushText(text.slice(last));
+  return out;
+}
 
 // Parses markdown structures (headings, blockquotes, bullet lists, code blocks)
 // and renders styled elements.
@@ -14,7 +59,7 @@ function renderContent(content: string, lang: "th" | "en") {
           key={idx}
           className="text-2xl sm:text-3xl font-display font-bold tracking-tight mt-10 mb-4 text-slate-100 border-b border-slate-900/60 pb-3"
         >
-          {para.replace(/^#\s+/, "")}
+          {renderInline(para.replace(/^#\s+/, ""))}
         </h1>
       );
     }
@@ -24,7 +69,7 @@ function renderContent(content: string, lang: "th" | "en") {
           key={idx}
           className="text-xl sm:text-2xl font-display font-bold tracking-tight mt-8 mb-4 text-slate-100"
         >
-          {para.replace(/^##\s+/, "")}
+          {renderInline(para.replace(/^##\s+/, ""))}
         </h2>
       );
     }
@@ -36,7 +81,7 @@ function renderContent(content: string, lang: "th" | "en") {
             lang === "th" ? "text-teal-400" : "text-indigo-400"
           }`}
         >
-          {para.replace(/^###\s+/, "")}
+          {renderInline(para.replace(/^###\s+/, ""))}
         </h3>
       );
     }
@@ -46,7 +91,7 @@ function renderContent(content: string, lang: "th" | "en") {
           key={idx}
           className="text-base sm:text-lg font-display font-bold tracking-tight mt-6 mb-3 text-slate-200"
         >
-          {para.replace(/^####\s+/, "")}
+          {renderInline(para.replace(/^####\s+/, ""))}
         </h4>
       );
     }
@@ -58,7 +103,7 @@ function renderContent(content: string, lang: "th" | "en") {
           key={idx}
           className="border-l-2 border-amber-500/40 bg-[#0c1220]/25 px-6 py-4 my-6 rounded-r-xl italic text-slate-300 font-sans text-sm sm:text-base leading-loose"
         >
-          {para.replace(/^>\s+/, "")}
+          {renderInline(para.replace(/^>\s?/gm, ""))}
         </blockquote>
       );
     }
@@ -74,7 +119,7 @@ function renderContent(content: string, lang: "th" | "en") {
                 : "text-slate-200 font-sans leading-loose"
             }`}
           >
-            {para.replace(/^-\s+/, "")}
+            {renderInline(para.replace(/^-\s+/, ""))}
           </li>
         </ul>
       );
@@ -103,7 +148,7 @@ function renderContent(content: string, lang: "th" | "en") {
             : "text-slate-100 font-sans leading-loose"
         }`}
       >
-        {para}
+        {renderInline(para)}
       </p>
     );
   });
