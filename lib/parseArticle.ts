@@ -117,6 +117,91 @@ function blockText($: cheerio.CheerioAPI, el: AnyNode): string {
 }
 
 /**
+ * If a <p> is wholly a single emphasis wrapper, classify it: "bi" (bold+italic,
+ * e.g. <strong><em>…</em></strong> or <em><strong>…</strong></em>), "italic"
+ * (a single <em>/<i>), or "bold" (a single <strong>/<b>). Whitespace-only text
+ * nodes and a lone <br> are ignored. Returns null when the paragraph mixes
+ * emphasis with other content, so "<strong>(Minghui.org)</strong> text",
+ * captions, and poems never match.
+ */
+function wholeParagraphEmphasis(
+  $: cheerio.CheerioAPI,
+  el: AnyNode,
+): "bi" | "italic" | "bold" | null {
+  const kids = $(el)
+    .contents()
+    .toArray()
+    .filter(
+      (n) =>
+        !(isText(n) && !n.data.trim()) &&
+        !(isTag(n) && n.tagName.toLowerCase() === "br"),
+    );
+  if (kids.length !== 1 || !isTag(kids[0])) return null;
+  const tag = kids[0].tagName.toLowerCase();
+  const inner = $(kids[0])
+    .contents()
+    .toArray()
+    .filter((n) => !(isText(n) && !n.data.trim()));
+  const innerIs = (names: string[]) =>
+    inner.length === 1 &&
+    isTag(inner[0]) &&
+    names.includes(inner[0].tagName.toLowerCase());
+  if (tag === "strong" || tag === "b")
+    return innerIs(["em", "i"]) ? "bi" : "bold";
+  if (tag === "em" || tag === "i")
+    return innerIs(["strong", "b"]) ? "bi" : "italic";
+  return null;
+}
+
+/** The block immediately after `el` is a prose <p> (not another emphasis heading). */
+function nextBlockIsProse($: cheerio.CheerioAPI, el: AnyNode): boolean {
+  const sib = $(el)
+    .nextAll("p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, table, pre")
+    .first();
+  if (
+    sib.length === 0 ||
+    !isTag(sib[0]) ||
+    sib[0].tagName.toLowerCase() !== "p"
+  )
+    return false;
+  if (wholeParagraphEmphasis($, sib[0])) return false;
+  return $(sib).text().trim().length > 0;
+}
+
+/**
+ * Minghui marks some section subheadings as a whole <p> wrapped entirely in
+ * emphasis (e.g. <p class="normal"><strong><em>Title</em></strong></p>) rather
+ * than an <hN>; left alone, the parser emits `***Title***`/`*Title*` and the
+ * reader shows an emphasised paragraph instead of a heading. Promote those to a
+ * markdown heading. Bold+italic is an unambiguous heading signal. Italic-only is
+ * weaker (italics also wrap book titles, bylines, editor's notes), so it is
+ * promoted only when short, unpunctuated, followed by prose, and not an author
+ * byline or editor's note — guards verified against 344 real articles. The level
+ * is one below the article's <h3> sections (#### ), or ### when the article has
+ * no real heading of its own, so the outline never skips a level. Returns the
+ * heading marker, or null when the paragraph is not a promotable heading.
+ */
+function emphasisHeadingMarker(
+  $: cheerio.CheerioAPI,
+  el: AnyNode,
+  hasH3: boolean,
+): string | null {
+  const kind = wholeParagraphEmphasis($, el);
+  if (!kind || kind === "bold") return null;
+  const plain = $(el).text().replace(/\s+/g, " ").trim();
+  if (!plain) return null;
+  const level = hasH3 ? "####" : "###";
+  if (kind === "bi") return level;
+  // italic-only: apply the false-positive guards
+  if (plain.length > 90) return null;
+  if (/[.!?。！？]$/.test(plain)) return null;
+  if (/^By\b/i.test(plain)) return null; // author byline ("By a … practitioner …")
+  if (/^Editor['’]?s note/i.test(plain)) return null;
+  if (!nextBlockIsProse($, el)) return null;
+  return level;
+}
+
+/**
  * Extract the English title and body text from a Minghui article page.
  *
  * The body is emitted as markdown: headings become `#`/`##`/..., list items
@@ -136,7 +221,12 @@ export function parseArticleHtml(html: string): ParsedArticle {
   let body = $(".article-body-content");
   if (body.length === 0) body = $(".jingwenNei");
 
-  const contentElements: string[] = [];
+  // Real headings in Minghui bodies are <h3>; emphasis-paragraph subheadings nest
+  // one level below them (so → ####). When an article has no <h3> at all, those
+  // paragraphs are its top-level sections (so → ###, no outline level-skip).
+  const hasH3 = body.find("h3").length > 0;
+
+  const blocks: { text: string; isQuote: boolean }[] = [];
   body.find(BLOCK_SELECTOR).each((_, el) => {
     const element = $(el);
 
@@ -172,10 +262,24 @@ export function parseArticleHtml(html: string): ParsedArticle {
     if (!text) return;
 
     const tagName = el.tagName.toLowerCase();
+
+    // A symbol-only paragraph (e.g. "* * * * * * *") is a decorative scene break;
+    // its bare asterisks would otherwise be mangled by the renderer's emphasis
+    // regex, so normalise it to a markdown horizontal rule.
+    if (tagName === "p" && /\*/.test(text) && /^[*\s]+$/.test(text)) {
+      blocks.push({ text: "---", isQuote: false });
+      return;
+    }
+
     const isQuote =
       tagName === "blockquote" ||
       element.hasClass("quote") ||
       element.closest(".quote").length > 0;
+
+    // A whole-paragraph emphasis subheading (<p><strong><em>…</em></strong></p>)
+    // is promoted to a real heading rather than left as inline emphasis.
+    const emphMarker =
+      tagName === "p" ? emphasisHeadingMarker($, el, hasH3) : null;
 
     // Convert elements to standard markdown indicators for formatting. Headings
     // are styled bold by the renderer, so strip the redundant inline emphasis
@@ -188,6 +292,8 @@ export function parseArticleHtml(html: string): ParsedArticle {
       text = `### ${stripInlineMarkers(text)}`;
     } else if (tagName.startsWith("h")) {
       text = `#### ${stripInlineMarkers(text)}`;
+    } else if (emphMarker) {
+      text = `${emphMarker} ${stripInlineMarkers(text)}`;
     } else if (isQuote) {
       // Prefix every line so a multi-line poem stays one blockquote.
       text = text
@@ -211,8 +317,18 @@ export function parseArticleHtml(html: string): ParsedArticle {
       text = `\`\`\`\n${text}\n\`\`\``;
     }
 
-    contentElements.push(text);
+    blocks.push({ text, isQuote });
   });
 
-  return { title_en, content_en: contentElements.join("\n\n") };
+  // Join blocks with a blank line, EXCEPT between two adjacent quote blocks: a
+  // single multi-paragraph quotation that Minghui split across sibling
+  // <p class="quote"> elements is rejoined into one `> ` blockquote (otherwise
+  // the renderer paints each fragment as its own separate quote box).
+  let content_en = "";
+  blocks.forEach((b, i) => {
+    if (i > 0) content_en += b.isQuote && blocks[i - 1].isQuote ? "\n" : "\n\n";
+    content_en += b.text;
+  });
+
+  return { title_en, content_en };
 }

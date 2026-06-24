@@ -5,8 +5,11 @@ import type { ArticleDetails } from "@/components/types";
 
 // Parses inline markdown — **bold**, *italic*, [text](url) — plus \n line breaks
 // within a block, returning React nodes. The block-level parser (renderContent)
-// strips the block prefix, then hands the remainder here.
-function renderInline(text: string): ReactNode[] {
+// strips the block prefix, then hands the remainder here. Each emphasis/link
+// capture is rendered by recursing, so markup nested inside another marker —
+// e.g. a link inside italics, *[Zhuan Falun](url)* — is resolved instead of
+// printed as literal text.
+export function renderInline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
   const re =
     /\*\*\*([^*]+)\*\*\*|\*\*([^*]+)\*\*|\*([^*\n]+)\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
@@ -24,17 +27,17 @@ function renderInline(text: string): ReactNode[] {
     if (m[1] !== undefined) {
       out.push(
         <strong key={`bi${key++}`} className="font-semibold text-slate-100">
-          <em>{m[1]}</em>
+          <em>{renderInline(m[1])}</em>
         </strong>,
       );
     } else if (m[2] !== undefined) {
       out.push(
         <strong key={`b${key++}`} className="font-semibold text-slate-100">
-          {m[2]}
+          {renderInline(m[2])}
         </strong>,
       );
     } else if (m[3] !== undefined) {
-      out.push(<em key={`i${key++}`}>{m[3]}</em>);
+      out.push(<em key={`i${key++}`}>{renderInline(m[3])}</em>);
     } else {
       out.push(
         <a
@@ -144,7 +147,12 @@ function renderContent(content: string, lang: "th" | "en") {
       );
     }
 
-    // 5. Standard Paragraph (Typographically tuned)
+    // 5. Horizontal rule (a normalized decorative scene break)
+    if (/^-{3,}$/.test(para.trim())) {
+      return <hr key={idx} className="my-8 border-t border-slate-800/70" />;
+    }
+
+    // 6. Standard Paragraph (Typographically tuned)
     return (
       <p
         key={idx}
