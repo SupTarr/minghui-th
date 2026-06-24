@@ -36,7 +36,7 @@ export default function Header({ googleIdToken, userEmail }: HeaderProps) {
                 TH
               </span>
             </h1>
-            <p className="text-3xs sm:text-2xs text-slate-455 font-sans tracking-wide">
+            <p className="text-3xs sm:text-2xs text-slate-400 font-sans tracking-wide">
               ระบบสืบค้นข้อมูลและแปลถอดความบทความสัจธรรมธรรมปฏิบัติฝึกสมาธิ
             </p>
           </div>
@@ -46,7 +46,7 @@ export default function Header({ googleIdToken, userEmail }: HeaderProps) {
           {googleIdToken && (
             <div className="hidden sm:flex items-center gap-2 bg-[#0c1220]/60 border border-slate-900 px-3.5 py-1.5 rounded-xl text-3xs font-mono">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-opacity" />
-              <span className="text-slate-350 max-w-[140px] truncate">
+              <span className="text-slate-300 max-w-[140px] truncate">
                 {userEmail}
               </span>
             </div>

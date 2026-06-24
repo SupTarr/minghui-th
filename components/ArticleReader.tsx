@@ -124,7 +124,7 @@ function renderContent(content: string, lang: "th" | "en") {
           <li
             className={`text-sm sm:text-base ${
               lang === "en"
-                ? "text-slate-350 font-sans leading-relaxed"
+                ? "text-slate-300 font-sans leading-relaxed"
                 : "text-slate-200 font-sans leading-loose"
             }`}
           >
@@ -158,7 +158,7 @@ function renderContent(content: string, lang: "th" | "en") {
         key={idx}
         className={`indent-8 mb-5 text-sm sm:text-base ${
           lang === "en"
-            ? "text-slate-350 font-sans leading-relaxed"
+            ? "text-slate-300 font-sans leading-relaxed"
             : "text-slate-100 font-sans leading-loose"
         }`}
       >
@@ -303,7 +303,7 @@ export default function ArticleReader({
                 className={`px-3 py-1.5 rounded-lg transition-all font-semibold cursor-pointer ${
                   readerLanguage === "th"
                     ? "bg-teal-500 text-slate-950 font-bold"
-                    : "text-slate-455 hover:text-slate-200"
+                    : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 ภาษาไทย
@@ -314,8 +314,8 @@ export default function ArticleReader({
                 onClick={() => setReaderLanguage("en")}
                 className={`px-3 py-1.5 rounded-lg transition-all font-semibold cursor-pointer ${
                   readerLanguage === "en"
-                    ? "bg-teal-500 text-slate-955 font-bold"
-                    : "text-slate-455 hover:text-slate-200"
+                    ? "bg-teal-500 text-slate-950 font-bold"
+                    : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 English
@@ -326,8 +326,8 @@ export default function ArticleReader({
                 onClick={() => setReaderLanguage("both")}
                 className={`px-3 py-1.5 rounded-lg transition-all font-semibold cursor-pointer ${
                   readerLanguage === "both"
-                    ? "bg-teal-500 text-slate-955 font-bold"
-                    : "text-slate-455 hover:text-slate-200"
+                    ? "bg-teal-500 text-slate-950 font-bold"
+                    : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 อ่านควบคู่
@@ -400,7 +400,7 @@ export default function ArticleReader({
         </div>
 
         {isLoadingArticle ? (
-          <div className="h-[60vh] flex flex-col items-center justify-center text-slate-550 space-y-4 relative z-10 font-sans">
+          <div className="h-[60vh] flex flex-col items-center justify-center text-slate-500 space-y-4 relative z-10 font-sans">
             <svg
               aria-hidden="true"
               className="animate-spin h-8 w-8 text-teal-500"
@@ -421,7 +421,7 @@ export default function ArticleReader({
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               />
             </svg>
-            <p className="text-3xs uppercase tracking-wider text-slate-450 font-mono">
+            <p className="text-3xs uppercase tracking-wider text-slate-400 font-mono">
               กำลังโหลดเนื้อหาจาก Drive...
             </p>
           </div>

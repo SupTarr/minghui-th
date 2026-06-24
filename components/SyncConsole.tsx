@@ -80,7 +80,7 @@ export default function SyncConsole({
         <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">
           แผงคอนโซลควบคุม
         </h2>
-        <p className="text-3xs text-slate-550 font-sans mt-0.5">
+        <p className="text-3xs text-slate-500 font-sans mt-0.5">
           Workspace Operations & Execution Logs
         </p>
       </div>
@@ -94,7 +94,7 @@ export default function SyncConsole({
           <p className="text-lg font-mono font-bold text-teal-400 mt-0.5">
             {archivedCount}
           </p>
-          <span className="text-4xs text-slate-550 font-sans mt-0.5 block leading-none">
+          <span className="text-4xs text-slate-500 font-sans mt-0.5 block leading-none">
             {hasDateFilter ? "ในช่วงที่เลือก" : "ใน 7 วันล่าสุด"}
           </span>
         </div>
@@ -105,7 +105,7 @@ export default function SyncConsole({
           <p className="text-lg font-mono font-bold text-[#fda4af] mt-0.5">
             {newlyCount}
           </p>
-          <span className="text-4xs text-slate-550 font-sans mt-0.5 block leading-none">
+          <span className="text-4xs text-slate-500 font-sans mt-0.5 block leading-none">
             ในเซสชันนี้
           </span>
         </div>
@@ -120,7 +120,7 @@ export default function SyncConsole({
             <span className="w-2 rounded-full h-2 bg-amber-500/40 border border-amber-500/20" />
             <span className="w-2 rounded-full h-2 bg-emerald-500/40 border border-emerald-500/20" />
           </div>
-          <span className="text-4xs text-slate-550 font-mono tracking-wide uppercase">
+          <span className="text-4xs text-slate-500 font-mono tracking-wide uppercase">
             live_operation.sh
           </span>
           <span className="w-8" />
@@ -128,7 +128,7 @@ export default function SyncConsole({
 
         <div className="p-3 flex-1 overflow-y-auto font-mono text-4xs space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 bg-[#060913]">
           {logs.length === 0 ? (
-            <div className="text-slate-655 italic font-sans text-3xs">
+            <div className="text-slate-600 italic font-sans text-3xs">
               รอเริ่มการซิงค์ข้อมูล... กรุณากดปุ่ม &quot;ซิงค์ข้อมูลระบบ&quot;
               ในแผงควบคุมขวา
             </div>
@@ -146,7 +146,7 @@ export default function SyncConsole({
         {isSyncing && (
           <div className="bg-[#0c1220]/60 border-t border-slate-900 px-4 py-2.5 backdrop-blur-xs">
             <div className="flex justify-between items-center text-4xs mb-1.5">
-              <span className="truncate max-w-[80%] text-slate-455 font-sans tracking-wide">
+              <span className="truncate max-w-[80%] text-slate-400 font-sans tracking-wide">
                 {statusMessage}
               </span>
               <span className="font-mono text-teal-400 font-bold">

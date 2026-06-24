@@ -195,10 +195,10 @@ export default function DateRangePicker({
           type="button"
           disabled={disabled}
           onClick={toggleCalendar}
-          className="bg-[#0c1220]/60 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-350 hover:border-slate-800 focus:outline-none transition-all flex items-center gap-2 group cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-[#0c1220]/60 border border-slate-900 rounded-xl px-3 py-1.5 text-xs text-slate-300 hover:border-slate-800 focus:outline-none transition-all flex items-center gap-2 group cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg
-            className="w-3.5 h-3.5 text-slate-555 group-hover:text-teal-400 transition-colors"
+            className="w-3.5 h-3.5 text-slate-500 group-hover:text-teal-400 transition-colors"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -214,7 +214,7 @@ export default function DateRangePicker({
             {triggerText}
           </span>
           <svg
-            className={`w-3 h-3 text-slate-555 group-hover:text-slate-300 transition-transform duration-200 ${showCalendar ? "rotate-180" : ""}`}
+            className={`w-3 h-3 text-slate-500 group-hover:text-slate-300 transition-transform duration-200 ${showCalendar ? "rotate-180" : ""}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -232,11 +232,11 @@ export default function DateRangePicker({
           type="button"
           disabled={disabled}
           onClick={toggleCalendar}
-          className="w-full bg-[#060913] border border-slate-900 rounded-xl px-4 py-2.5 text-xs text-slate-350 hover:border-slate-800 focus:outline-none transition-all flex items-center justify-between group disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          className="w-full bg-[#060913] border border-slate-900 rounded-xl px-4 py-2.5 text-xs text-slate-300 hover:border-slate-800 focus:outline-none transition-all flex items-center justify-between group disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
         >
           <div className="flex items-center gap-2">
             <svg
-              className="w-3.5 h-3.5 text-slate-555 group-hover:text-teal-400 transition-colors"
+              className="w-3.5 h-3.5 text-slate-500 group-hover:text-teal-400 transition-colors"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -259,7 +259,7 @@ export default function DateRangePicker({
             </span>
           </div>
           <svg
-            className={`w-3.5 h-3.5 text-slate-555 group-hover:text-slate-300 transition-transform duration-200 ${showCalendar ? "rotate-180" : ""}`}
+            className={`w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 transition-transform duration-200 ${showCalendar ? "rotate-180" : ""}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -287,7 +287,7 @@ export default function DateRangePicker({
                   new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1),
                 )
               }
-              className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-450 hover:text-slate-200 transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
             >
               <svg
                 aria-hidden="true"
@@ -315,7 +315,7 @@ export default function DateRangePicker({
                   new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1),
                 )
               }
-              className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-450 hover:text-slate-200 transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
             >
               <svg
                 aria-hidden="true"
@@ -334,7 +334,7 @@ export default function DateRangePicker({
             </button>
           </div>
 
-          <div className="grid grid-cols-7 gap-1 text-center text-4xs font-semibold text-slate-555 uppercase tracking-widest font-mono">
+          <div className="grid grid-cols-7 gap-1 text-center text-4xs font-semibold text-slate-500 uppercase tracking-widest font-mono">
             {daysOfWeek.map((day) => (
               <div key={day}>{day}</div>
             ))}
@@ -354,7 +354,7 @@ export default function DateRangePicker({
                 startDate &&
                 !endDate &&
                 item.dateStr > startDate &&
-                getDaysDiff(startDate, item.dateStr) > 7;
+                getDaysDiff(startDate, item.dateStr) >= 7;
               return (
                 <button
                   key={idx}
@@ -375,7 +375,7 @@ export default function DateRangePicker({
                             ? "bg-teal-500/15 text-teal-300 font-medium"
                             : isTod
                               ? "bg-[#060913] text-teal-400 border border-teal-500/20"
-                              : "text-slate-350 hover:bg-[#060913]"
+                              : "text-slate-300 hover:bg-[#060913]"
                   }`}
                 >
                   {item.day}
@@ -390,12 +390,14 @@ export default function DateRangePicker({
               onClick={() => {
                 const today = new Date();
                 const past = new Date();
-                past.setDate(today.getDate() - 7);
+                // 7 inclusive days (today-6 … today) to match the server's
+                // MAX_DAYS=7 cap; today-7 would be 8 days and drop the oldest.
+                past.setDate(today.getDate() - 6);
                 setStartDate(formatDateToString(past));
                 setEndDate(formatDateToString(today));
                 setShowCalendar(false);
               }}
-              className="text-teal-400 hover:text-teal-350 transition-colors cursor-pointer"
+              className="text-teal-400 hover:text-teal-300 transition-colors cursor-pointer"
             >
               7 วันล่าสุด
             </button>
