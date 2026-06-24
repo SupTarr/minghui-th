@@ -19,15 +19,54 @@ export const maxDuration = 300;
 // paid tier 1 allows ~1000 RPM, so 10 concurrent is well under quota.
 const CONCURRENCY = 10;
 
-// Stop *starting* new chunks once elapsed passes this, so a chunk launched just
-// under the line still has room to finish (~70s) before the 300s hard cap —
-// the function returns cleanly instead of being killed mid-write. Leftover
-// articles are picked up next run (scrape-time dedup self-heals). 26 articles
-// finish in ~3 chunks (~210s) so this only bites on abnormally large batches.
-const TIME_BUDGET_MS = 220_000;
+// Stop *starting* new chunks once elapsed passes this. A chunk launched just
+// under the line can still run one worst-case ARTICLE_TIMEOUT_MS article plus
+// its index write, so this MUST stay below
+// maxDuration - ARTICLE_TIMEOUT_MS - (index-write margin) for the function to
+// return cleanly instead of being killed mid-write: 190 + 85 + ~15 ≈ 290s < 300.
+// Leftover articles are picked up next run (scrape-time dedup self-heals); 26
+// articles finish in ~3 chunks so this only bites on abnormally large batches.
+const TIME_BUDGET_MS = 190_000;
 
-type Article = { url: string; title_en: string; date: string };
+// Cap a single article's translate+save. The between-chunk budget guard can't
+// interrupt an in-flight chunk, and the in-process Gemini call is passed no
+// AbortSignal, so without this one hung call could pin its whole chunk and push
+// past maxDuration. On timeout the article is dropped to null (re-translated
+// next run via dedup), bounding each chunk's wall time. Kept below
+// maxDuration - TIME_BUDGET_MS so a chunk started near the budget edge still
+// finishes (with its index write) before the 300s cap.
+const ARTICLE_TIMEOUT_MS = 85_000;
+
+type Article = {
+  url: string;
+  title_en: string;
+  date: string;
+  category: string;
+};
 type ArticleResult = { url: string; filePath: string; entry: unknown };
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`Timed out after ${ms}ms: ${label}`)),
+      ms,
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
 
 // Translate + save a single article. Returns its catalog entry on success, or
 // null on any failure (logged) so one bad article never aborts its chunk.
@@ -59,6 +98,9 @@ async function processArticle(
         content_en: translation.content_en,
         content_th: translation.content_th,
         date: article.date,
+        // Forward the scraped sub-category; without it /api/save falls back to
+        // "Cultivation" and every auto-synced article is mislabeled.
+        category: article.category,
       }),
     });
     const saveRes = await savePOST(saveReq);
@@ -83,6 +125,10 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
   const headers = new Headers(incomingHeaders);
   headers.set("Content-Type", "application/json");
 
+  // Start the budget clock BEFORE the scrape so its network + Drive-list round
+  // trips count against the window, leaving real headroom before the 300s cap.
+  const startedAt = Date.now();
+
   // 1. Trigger the scraper endpoint to find new articles
   const scrapeReq = new Request(`${origin}/api/scrape`, {
     method: "POST",
@@ -97,6 +143,7 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
   const scrapeData = await scrapeRes.json();
   const articles: Article[] = scrapeData.articles || [];
   const processed: Array<{ url: string; filePath: string }> = [];
+  let skipped = 0;
 
   console.log(
     `Cron pipeline found ${articles.length} new articles to process.`,
@@ -104,12 +151,16 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
 
   // 2. Process articles in concurrent chunks: translate+save run in parallel
   // within a chunk, then a single index write commits the chunk's entries.
-  const startedAt = Date.now();
   for (let i = 0; i < articles.length; i += CONCURRENCY) {
     if (Date.now() - startedAt > TIME_BUDGET_MS) {
-      console.warn(
-        `Time budget hit after ${processed.length} articles; ` +
-          `${articles.length - i} left for the next run.`,
+      skipped = articles.length - i;
+      // NOTE: leftovers only self-heal on the NEXT run while they're still on
+      // the single scraped listing page. A large backlog (e.g. after an outage)
+      // can scroll off page 1 and be lost — the real fix is a durable backlog
+      // queue / search-archive pagination. Log loudly so it's visible meanwhile.
+      console.error(
+        `Time budget hit after ${processed.length} articles; ${skipped} ` +
+          `left for the next run (at risk if they scroll off the listing page).`,
       );
       break;
     }
@@ -122,7 +173,16 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
     );
 
     const results = await Promise.all(
-      chunk.map((article) => processArticle(origin, article, headers)),
+      chunk.map((article) =>
+        withTimeout(
+          processArticle(origin, article, headers),
+          ARTICLE_TIMEOUT_MS,
+          article.url,
+        ).catch((err) => {
+          console.error(`Article failed/timed out: ${article.url}`, err);
+          return null;
+        }),
+      ),
     );
     const done = results.filter((r): r is ArticleResult => r !== null);
 
@@ -158,7 +218,7 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
     }
   }
 
-  return processed;
+  return { processed, skipped };
 }
 
 export async function GET(req: Request) {
@@ -168,11 +228,12 @@ export async function GET(req: Request) {
     }
 
     const { origin } = new URL(req.url);
-    const processed = await runPipeline(origin, req.headers);
+    const { processed, skipped } = await runPipeline(origin, req.headers);
 
     return NextResponse.json({
       success: true,
       processedCount: processed.length,
+      skippedCount: skipped,
       processed,
     });
   } catch (error) {
@@ -192,11 +253,12 @@ export async function POST(req: Request) {
     }
 
     const { origin } = new URL(req.url);
-    const processed = await runPipeline(origin, req.headers);
+    const { processed, skipped } = await runPipeline(origin, req.headers);
 
     return NextResponse.json({
       success: true,
       processedCount: processed.length,
+      skippedCount: skipped,
       processed,
     });
   } catch (error) {

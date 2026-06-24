@@ -281,6 +281,7 @@ export default function DateRangePicker({
           <div className="flex justify-between items-center">
             <button
               type="button"
+              aria-label="เดือนก่อนหน้า"
               onClick={() =>
                 setViewDate(
                   new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1),
@@ -289,6 +290,7 @@ export default function DateRangePicker({
               className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-450 hover:text-slate-200 transition-colors cursor-pointer"
             >
               <svg
+                aria-hidden="true"
                 className="w-3.5 h-3.5"
                 fill="none"
                 stroke="currentColor"
@@ -307,6 +309,7 @@ export default function DateRangePicker({
             </span>
             <button
               type="button"
+              aria-label="เดือนถัดไป"
               onClick={() =>
                 setViewDate(
                   new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1),
@@ -315,6 +318,7 @@ export default function DateRangePicker({
               className="p-1.5 rounded-lg hover:bg-slate-900 text-slate-450 hover:text-slate-200 transition-colors cursor-pointer"
             >
               <svg
+                aria-hidden="true"
                 className="w-3.5 h-3.5"
                 fill="none"
                 stroke="currentColor"
@@ -356,6 +360,9 @@ export default function DateRangePicker({
                   key={idx}
                   type="button"
                   disabled={!!isDisabled}
+                  aria-label={formatThaiDateShort(item.dateStr)}
+                  aria-pressed={isStart || isEnd}
+                  aria-current={isTod ? "date" : undefined}
                   onClick={() => handleDateClick(item.dateStr)}
                   className={`py-1 text-3xs rounded-md transition-colors cursor-pointer ${
                     isDisabled

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import * as cheerio from "cheerio";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { authorize } from "@/lib/auth";
+import { parseArticleHtml } from "@/lib/parseArticle";
 
 export async function POST(req: Request) {
   try {
@@ -13,11 +13,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const { url } = await req.json();
+    const body = await req.json().catch(() => null);
+    const url = body?.url;
 
-    if (!url) {
+    if (typeof url !== "string" || url.length === 0) {
       return NextResponse.json(
-        { error: "Missing article URL" },
+        { error: "Missing or invalid article URL" },
         { status: 400 },
       );
     }
@@ -37,65 +38,12 @@ export async function POST(req: Request) {
     }
 
     const html = await response.text();
-    const $ = cheerio.load(html);
 
     // 2. Extract English title & content paragraphs
-    const title_en = $(".article-title").text().trim();
+    const { title_en, content_en } = parseArticleHtml(html);
     if (!title_en) {
       throw new Error("Could not find article title on the page.");
     }
-
-    const contentElements: string[] = [];
-    $(".article-body-content")
-      .find("p, h1, h2, h3, h4, h5, h6, blockquote, li, td, th, pre, code")
-      .each((_, el) => {
-        const element = $(el);
-        // Skip metadata section (class="splitted") and copyright notices
-        if (
-          element.hasClass("splitted") ||
-          element.closest(".splitted").length > 0 ||
-          element.hasClass("copyright-notice") ||
-          element.closest(".copyright-notice").length > 0
-        ) {
-          return;
-        }
-
-        // Avoid duplicating text by checking if an ancestor element is also in our matched set
-        const parentSelected = element
-          .parent()
-          .closest(
-            "p, h1, h2, h3, h4, h5, h6, blockquote, li, td, th, pre, code",
-          );
-        if (parentSelected.length > 0) {
-          return;
-        }
-
-        let text = element.text().trim();
-        if (!text) return;
-
-        const tagName = el.tagName.toLowerCase();
-
-        // Convert elements to standard markdown indicators for formatting
-        if (tagName === "h1") {
-          text = `# ${text}`;
-        } else if (tagName === "h2") {
-          text = `## ${text}`;
-        } else if (tagName === "h3") {
-          text = `### ${text}`;
-        } else if (tagName.startsWith("h")) {
-          text = `#### ${text}`;
-        } else if (tagName === "blockquote") {
-          text = `> ${text}`;
-        } else if (tagName === "li") {
-          text = `- ${text}`;
-        } else if (tagName === "pre" || tagName === "code") {
-          text = `\`\`\`\n${text}\n\`\`\``;
-        }
-
-        contentElements.push(text);
-      });
-
-    const content_en = contentElements.join("\n\n");
     if (!content_en) {
       throw new Error(
         "Could not extract any content paragraphs from the article.",
@@ -132,18 +80,32 @@ Article content: ${content_en}`;
     const result = await model.generateContent(prompt);
     const responseText = result.response.text();
 
+    let parsedTranslation: { title_th?: unknown; content_th?: unknown };
     try {
-      const parsedTranslation = JSON.parse(responseText);
-      return NextResponse.json({
-        title_en,
-        content_en,
-        title_th: parsedTranslation.title_th,
-        content_th: parsedTranslation.content_th,
-      });
+      parsedTranslation = JSON.parse(responseText);
     } catch {
       console.error("Failed to parse JSON response from Gemini:", responseText);
       throw new Error("Gemini API did not return valid JSON translation.");
     }
+
+    // responseMimeType only guarantees valid JSON, not the right shape — there's
+    // no responseSchema. Validate the keys exist as strings so a malformed model
+    // reply fails here (at the real cause) instead of returning a 200 with
+    // undefined fields that /api/save later rejects with a misleading 400.
+    const { title_th, content_th } = parsedTranslation;
+    if (typeof title_th !== "string" || typeof content_th !== "string") {
+      console.error("Gemini JSON missing title_th/content_th:", responseText);
+      throw new Error(
+        "Gemini translation is missing title_th/content_th string fields.",
+      );
+    }
+
+    return NextResponse.json({
+      title_en,
+      content_en,
+      title_th,
+      content_th,
+    });
   } catch (error) {
     const err = error as Error;
     console.error("Error in /api/translate:", err);

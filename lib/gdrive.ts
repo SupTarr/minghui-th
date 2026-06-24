@@ -67,6 +67,14 @@ function getListParams(
     fields: fields,
     supportsAllDrives: true,
     includeItemsFromAllDrives: true,
+    // Drive permits duplicate names under one parent, and a cross-process race
+    // (cron + manual sync, retried invocations) can create duplicate date
+    // folders / files. Sorting by createdTime makes every reader and writer
+    // resolve files[0] to the SAME (oldest) match, so reads and writes converge
+    // on one canonical node instead of picking nondeterministically. Our queries
+    // filter by exact name + parent (a tiny result set), so the "avoid
+    // createdTime on large collections" caveat doesn't apply.
+    orderBy: "createdTime",
   };
 
   const driveId = process.env.GOOGLE_DRIVE_ID;
@@ -78,6 +86,75 @@ function getListParams(
   return params;
 }
 
+// Drive query terms wrap string literals in single quotes, so a value
+// containing a single quote (or backslash) would break out of the literal and
+// rewrite the query — an injection sink when the value comes from user input
+// (e.g. /api/article?filePath). Escape backslash first, then the quote.
+function escapeDriveQueryValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+// gaxios (googleapis' HTTP layer) retries only idempotent verbs by default
+// (GET/HEAD/PUT/OPTIONS/DELETE), so files.create (POST) and files.update (PATCH)
+// get ZERO retries — a single transient Drive 429/5xx aborts a write and orphans
+// the article (file saved, index entry missing). We retry the WHOLE
+// list-then-upsert (not just the failed call): a re-list turns a
+// partially-succeeded create into an update, so retries can't manufacture
+// duplicates the way a blind create retry would.
+const RETRYABLE_DRIVE_STATUS = new Set([429, 500, 502, 503, 504]);
+const MAX_WRITE_ATTEMPTS = 4;
+
+function driveErrorStatus(err: unknown): number | undefined {
+  const e = err as {
+    code?: unknown;
+    status?: unknown;
+    response?: { status?: unknown };
+  };
+  const raw = e?.response?.status ?? e?.status ?? e?.code;
+  const n = typeof raw === "string" ? Number(raw) : raw;
+  return typeof n === "number" && !Number.isNaN(n) ? n : undefined;
+}
+
+async function withDriveWriteRetry<T>(
+  label: string,
+  op: () => Promise<T>,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= MAX_WRITE_ATTEMPTS; attempt++) {
+    try {
+      return await op();
+    } catch (err) {
+      lastErr = err;
+      const status = driveErrorStatus(err);
+      if (
+        attempt === MAX_WRITE_ATTEMPTS ||
+        status === undefined ||
+        !RETRYABLE_DRIVE_STATUS.has(status)
+      ) {
+        throw err;
+      }
+      // Honor Retry-After (seconds) when Drive sends it, else exponential
+      // backoff capped at 8s with jitter to avoid a thundering herd. gaxios 7's
+      // response.headers is a Web `Headers` instance, so it must be read with
+      // .get() — bracket access returns undefined.
+      const retryAfterRaw = (err as { response?: { headers?: Headers } })?.response
+        ?.headers?.get?.("retry-after");
+      const retryAfter = Number(retryAfterRaw);
+      const backoff =
+        Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : Math.min(8000, 500 * 2 ** (attempt - 1)) +
+            Math.floor(Math.random() * 250);
+      console.warn(
+        `Drive ${label} attempt ${attempt}/${MAX_WRITE_ATTEMPTS} failed ` +
+          `(status ${status}); retrying in ${backoff}ms`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+    }
+  }
+  throw lastErr;
+}
+
 async function resolvePathToId(
   drive: drive_v3.Drive,
   path: string,
@@ -86,7 +163,7 @@ async function resolvePathToId(
   let currentParentId = "root";
 
   for (const part of parts) {
-    const query = `mimeType = 'application/vnd.google-apps.folder' and name = '${part}' and '${currentParentId}' in parents and trashed = false`;
+    const query = `mimeType = 'application/vnd.google-apps.folder' and name = '${escapeDriveQueryValue(part)}' and '${currentParentId}' in parents and trashed = false`;
     const res = await drive.files.list(getListParams(query, "files(id)"));
 
     const files = res.data.files;
@@ -159,11 +236,13 @@ export async function createFolder(
   const inflight = inflightFolderCreates.get(key);
   if (inflight) return inflight;
 
-  const promise = (async (): Promise<string> => {
+  const promise = withDriveWriteRetry(`createFolder(${folderName})`, async () => {
     const drive = initDrive();
 
-    // Search for existing folder
-    const query = `mimeType = 'application/vnd.google-apps.folder' and name = '${folderName}' and '${parentId}' in parents and trashed = false`;
+    // Search for existing folder. On a retry after a transient create failure
+    // this re-list finds the folder we just made, so we return it instead of
+    // creating a duplicate.
+    const query = `mimeType = 'application/vnd.google-apps.folder' and name = '${escapeDriveQueryValue(folderName)}' and '${parentId}' in parents and trashed = false`;
     const listRes = await drive.files.list(
       getListParams(query, "files(id, name)"),
     );
@@ -185,7 +264,7 @@ export async function createFolder(
     });
 
     return folder.data.id!;
-  })();
+  });
 
   inflightFolderCreates.set(key, promise);
   try {
@@ -207,7 +286,7 @@ export async function readFile(fileName: string): Promise<unknown> {
   const rootFolderId = await getRootFolderId(drive);
 
   // Search for the file
-  const query = `name = '${fileName}' and '${rootFolderId}' in parents and trashed = false`;
+  const query = `name = '${escapeDriveQueryValue(fileName)}' and '${rootFolderId}' in parents and trashed = false`;
   const listRes = await drive.files.list(getListParams(query, "files(id)"));
 
   const files = listRes.data.files;
@@ -232,7 +311,10 @@ export async function readFile(fileName: string): Promise<unknown> {
     try {
       return JSON.parse(data);
     } catch {
-      return data;
+      // Every file we store here is JSON; a non-JSON body means the file is
+      // corrupt. Throw instead of returning the raw string so callers surface a
+      // 500 rather than serving (and caching) double-encoded garbage.
+      throw new Error(`File ${fileName} exists but is not valid JSON`);
     }
   }
   return data;
@@ -256,43 +338,47 @@ export async function writeFile(
     targetFolderId = await createFolder(folderName, rootFolderId);
   }
 
-  // Search for existing file
-  const query = `name = '${fileName}' and '${targetFolderId}' in parents and trashed = false`;
-  const listRes = await drive.files.list(getListParams(query, "files(id)"));
-
-  const files = listRes.data.files;
   const bodyString =
     typeof content === "string" ? content : JSON.stringify(content);
 
-  const media = {
-    mimeType: "application/json",
-    body: bodyString,
-  };
+  // Retry the whole list-then-upsert so a transient failure after a create
+  // re-lists, finds the file, and updates it instead of making a duplicate.
+  return withDriveWriteRetry(`writeFile(${fileName})`, async () => {
+    // Search for existing file
+    const query = `name = '${escapeDriveQueryValue(fileName)}' and '${targetFolderId}' in parents and trashed = false`;
+    const listRes = await drive.files.list(getListParams(query, "files(id)"));
 
-  if (files && files.length > 0) {
-    // Update existing file
-    const fileId = files[0].id!;
-    const updateRes = await drive.files.update({
-      fileId: fileId,
-      supportsAllDrives: true,
-      media: media,
-      fields: "id",
-    });
-    return updateRes.data.id!;
-  } else {
-    // Create new file
-    const createRes = await drive.files.create({
-      supportsAllDrives: true,
-      requestBody: {
-        name: fileName,
-        parents: [targetFolderId],
-        mimeType: "application/json",
-      },
-      media: media,
-      fields: "id",
-    });
-    return createRes.data.id!;
-  }
+    const files = listRes.data.files;
+    const media = {
+      mimeType: "application/json",
+      body: bodyString,
+    };
+
+    if (files && files.length > 0) {
+      // Update existing file
+      const fileId = files[0].id!;
+      const updateRes = await drive.files.update({
+        fileId: fileId,
+        supportsAllDrives: true,
+        media: media,
+        fields: "id",
+      });
+      return updateRes.data.id!;
+    } else {
+      // Create new file
+      const createRes = await drive.files.create({
+        supportsAllDrives: true,
+        requestBody: {
+          name: fileName,
+          parents: [targetFolderId],
+          mimeType: "application/json",
+        },
+        media: media,
+        fields: "id",
+      });
+      return createRes.data.id!;
+    }
+  });
 }
 
 /**
@@ -315,10 +401,10 @@ export async function readFileAtPath(filePath: string): Promise<unknown> {
     let query = "";
     if (isLast) {
       // Find the file
-      query = `name = '${part}' and '${currentParentId}' in parents and trashed = false`;
+      query = `name = '${escapeDriveQueryValue(part)}' and '${currentParentId}' in parents and trashed = false`;
     } else {
       // Find the intermediate folder
-      query = `mimeType = 'application/vnd.google-apps.folder' and name = '${part}' and '${currentParentId}' in parents and trashed = false`;
+      query = `mimeType = 'application/vnd.google-apps.folder' and name = '${escapeDriveQueryValue(part)}' and '${currentParentId}' in parents and trashed = false`;
     }
 
     const listRes = await drive.files.list(getListParams(query, "files(id)"));
@@ -344,7 +430,10 @@ export async function readFileAtPath(filePath: string): Promise<unknown> {
     try {
       return JSON.parse(data);
     } catch {
-      return data;
+      // Stored files are always JSON; a non-JSON body is corruption. Throw so
+      // /api/article returns a 500 instead of serving and caching a raw,
+      // double-encoded string for an hour.
+      throw new Error(`File at ${filePath} exists but is not valid JSON`);
     }
   }
   return data;

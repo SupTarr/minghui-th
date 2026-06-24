@@ -20,7 +20,7 @@ function parseDateFromUrl(href: string): string | null {
   return null;
 }
 
-function parseDateText(dateStr: string): string {
+function parseDateText(dateStr: string): string | null {
   try {
     const clean = dateStr.replace(/\s+/g, " ").trim();
     const dateObj = new Date(clean);
@@ -33,7 +33,9 @@ function parseDateText(dateStr: string): string {
   } catch (e) {
     console.error("Error parsing date text:", dateStr, e);
   }
-  return dateStr;
+  // Return null rather than echoing the raw text back: an unparseable date must
+  // never become a Drive folder name.
+  return null;
 }
 
 export async function POST(req: Request) {
@@ -102,6 +104,16 @@ export async function POST(req: Request) {
         date = parseDateText(dateText.trim());
       }
 
+      // An article we can't date can't be stored or deduped correctly. Skip it,
+      // but log each skip — a silently dropped article is the same data-loss sin
+      // as the budget-skip path.
+      if (!date) {
+        console.warn(
+          `Skipping article with unparseable date: url=${url}, dateText="${dateText.trim()}"`,
+        );
+        return;
+      }
+
       if (title_en && url) {
         articles.push({ url, title_en, date, category });
       }
@@ -118,7 +130,16 @@ export async function POST(req: Request) {
           const dayIndex = await readDayIndex(date);
           for (const entry of dayIndex) existingUrls.add(entry.url);
         } catch (e) {
-          console.warn(`Could not read day index for ${date}:`, e);
+          // readDayIndex returns [] for a missing index and only throws when the
+          // file exists but is corrupt (non-array). So reaching here means this
+          // day's index is corrupt: dedup can't see it, so every article for the
+          // day looks new and gets re-translated each run until it's repaired.
+          // Log loudly (error, not warn) so the corruption is actionable.
+          console.error(
+            `CORRUPT day index for ${date} — dedup skipped; this day's ` +
+              `articles will be re-translated every run until the index is fixed:`,
+            e,
+          );
         }
       }),
     );

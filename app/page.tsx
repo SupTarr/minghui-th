@@ -41,6 +41,7 @@ export default function Dashboard() {
   const [progressPercent, setProgressPercent] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
+  const [archiveError, setArchiveError] = useState(false);
   const [startDate, setStartDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
@@ -103,6 +104,7 @@ export default function Dashboard() {
     null,
   );
   const [isLoadingArticle, setIsLoadingArticle] = useState(false);
+  const [articleError, setArticleError] = useState(false);
   const [readerLanguage, setReaderLanguage] = useState<"th" | "en" | "both">(
     "th",
   );
@@ -217,49 +219,88 @@ export default function Dashboard() {
       .catch((err) => console.error("Failed to load auth config:", err));
   }, []);
 
-  function handleCopyShareLink() {
+  async function handleCopyShareLink() {
     if (!readingArticlePath) return;
     const shareUrl = `${window.location.origin}${window.location.pathname}?article=${encodeURIComponent(readingArticlePath)}`;
-    navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        // The async Clipboard API is undefined in non-secure (http) contexts;
+        // fall back to a hidden textarea + execCommand so copy still works.
+        const ta = document.createElement("textarea");
+        ta.value = shareUrl;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        if (!ok) throw new Error("execCommand copy failed");
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      console.error("Copy failed", e);
+      addLog("⚠️ คัดลอกลิงก์ไม่สำเร็จ");
+    }
   }
 
   const loadArticleContent = useCallback(
-    async (path: string) => {
+    async (path: string, signal?: AbortSignal) => {
       try {
         setIsLoadingArticle(true);
+        setArticleError(false);
         const res = await fetch(
           `/api/article?filePath=${encodeURIComponent(path)}`,
+          { signal },
         );
+        if (signal?.aborted) return;
         if (res.ok) {
           const data = await res.json();
+          if (signal?.aborted) return;
           setArticleContent(data);
         } else {
+          setArticleError(true);
           addLog(`❌ โหลดบทความล้มเหลว: ${path}`);
         }
       } catch (e) {
+        if ((e as Error)?.name === "AbortError") return;
         console.error(e);
+        setArticleError(true);
         addLog(`❌ เกิดข้อผิดพลาดในการโหลดบทความ: ${path}`);
       } finally {
-        setIsLoadingArticle(false);
+        if (!signal?.aborted) setIsLoadingArticle(false);
       }
     },
     [addLog],
   );
 
-  // Fetch article content on path update
+  // Fetch article content on path update. Guard against out-of-order responses:
+  // a rapid path change A→B must not let A's slower response render under B's
+  // URL. Abort the in-flight fetch and cancel the deferred call on cleanup.
   useEffect(() => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
     if (readingArticlePath) {
       const path = readingArticlePath;
-      setTimeout(() => {
-        loadArticleContent(path);
+      timer = setTimeout(() => {
+        // Clear any prior article so a slow load can't flash stale content.
+        setArticleContent(null);
+        setArticleError(false);
+        loadArticleContent(path, controller.signal);
       }, 0);
     } else {
-      setTimeout(() => {
+      timer = setTimeout(() => {
         setArticleContent(null);
+        setArticleError(false);
+        setIsLoadingArticle(false);
       }, 0);
     }
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [readingArticlePath, loadArticleContent]);
 
   // Synchronize readingArticlePath with URL on mount & handle browser back/forward buttons
@@ -288,9 +329,10 @@ export default function Dashboard() {
   // with a date, loads just that day. The catalog is date-partitioned, so the
   // server only reads the relevant per-day indexes (never the whole archive).
   const fetchArchivedArticles = useCallback(
-    async (start?: string, end?: string) => {
+    async (start?: string, end?: string, signal?: AbortSignal) => {
       try {
         setLoadingInitial(true);
+        setArchiveError(false);
         const fmt = (d: Date) =>
           `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
             d.getDate(),
@@ -309,9 +351,15 @@ export default function Dashboard() {
           from = fmt(past);
         }
 
-        const res = await fetch(`/api/articles?from=${from}&to=${to}`);
+        const res = await fetch(`/api/articles?from=${from}&to=${to}`, {
+          signal,
+        });
+        // Only the latest request may commit state — a stale (superseded) fetch
+        // that resolves late is dropped here.
+        if (signal?.aborted) return;
         if (res.ok) {
           const data = await res.json();
+          if (signal?.aborted) return;
           // Sort by date descending
           const sorted = (data.articles || []).sort(
             (a: Article, b: Article) =>
@@ -319,23 +367,37 @@ export default function Dashboard() {
           );
           setArchivedArticles(sorted);
         } else {
+          setArchiveError(true);
           addLog("ระบบเกิดข้อผิดพลาดในการโหลดบทความที่บันทึกไว้");
         }
       } catch (e) {
+        if ((e as Error)?.name === "AbortError") return;
         console.error(e);
+        setArchiveError(true);
         addLog("ไม่สามารถติดต่อเซิร์ฟเวอร์เพื่อโหลดบทความเก่าได้");
       } finally {
-        setLoadingInitial(false);
+        if (!signal?.aborted) setLoadingInitial(false);
       }
     },
     [addLog],
   );
 
-  // Load the archive on mount and whenever the date filter changes.
+  // Load the archive on mount and whenever the date filter changes. The
+  // controller aborts the previous request so a two-click range pick (which
+  // fires two fetches) can't render the slower response's results.
   useEffect(() => {
-    setTimeout(() => {
-      fetchArchivedArticles(startDate || undefined, endDate || undefined);
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      fetchArchivedArticles(
+        startDate || undefined,
+        endDate || undefined,
+        controller.signal,
+      );
     }, 0);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [fetchArchivedArticles, startDate, endDate]);
 
   // Auto-scroll terminal logs to bottom
@@ -501,8 +563,18 @@ export default function Dashboard() {
           filePath: saveData.filePath,
         };
 
-        setNewlySynced((prev) => [syncedArticle, ...prev]);
-        setArchivedArticles((prev) => [syncedArticle, ...prev]);
+        // Dedupe before prepending: re-syncing an article (e.g. after an index
+        // write failed on the first pass) would otherwise insert a second card
+        // with the same React key.
+        const dedupePrepend = (prev: Article[]) => [
+          syncedArticle,
+          ...prev.filter(
+            (a) =>
+              a.filePath !== syncedArticle.filePath && a.url !== syncedArticle.url,
+          ),
+        ];
+        setNewlySynced(dedupePrepend);
+        setArchivedArticles(dedupePrepend);
 
         // Write this article's entry to its per-day index.json immediately,
         // right after the save succeeds (the index points at the saved file).
@@ -641,6 +713,13 @@ export default function Dashboard() {
             listArticles={listArticles}
             visibleCount={visibleCount}
             loadingInitial={loadingInitial}
+            archiveError={archiveError}
+            onRetryArchive={() =>
+              fetchArchivedArticles(
+                startDate || undefined,
+                endDate || undefined,
+              )
+            }
             scrollContainerRef={scrollContainerRef}
             loadMoreRef={loadMoreRef}
             openArticle={openArticle}
@@ -679,6 +758,7 @@ export default function Dashboard() {
         <ArticleReader
           articleContent={articleContent}
           isLoadingArticle={isLoadingArticle}
+          articleError={articleError}
           readerLanguage={readerLanguage}
           setReaderLanguage={setReaderLanguage}
           closeArticle={closeArticle}

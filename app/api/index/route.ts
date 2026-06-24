@@ -46,21 +46,35 @@ export async function POST(req: Request) {
       else byDate.set(entry.date, [entry]);
     }
 
+    // NOTE: each day's index is a read-merge-write with no cross-process lock.
+    // Drive API v3 exposes no conditional-write / If-Match precondition, so a
+    // true compare-and-set isn't possible here. Concurrent writers to the SAME
+    // day (the scheduled cron overlapping a manual UI sync) can still lose
+    // updates; that residual is handled out-of-band by the archive
+    // reconcile/adopt-orphans tooling and is low-risk for a single-user app.
     let added = 0;
     const days: string[] = [];
+    const failed: string[] = [];
     for (const [date, dayEntries] of byDate) {
-      // readDayIndex returns [] for a missing day and throws on a corrupted
-      // (non-array) index — so a read failure aborts before any overwrite.
-      const current = await readDayIndex(date);
+      // Isolate each day: readDayIndex throws on a corrupted (non-array) index,
+      // and writes can fail transiently. Catching per day means one bad day no
+      // longer aborts the rest and leaves earlier days written behind a 500 that
+      // hides the partial write.
+      try {
+        const current = await readDayIndex(date);
 
-      const merged = new Map<string, CatalogEntry>(
-        current.map((e) => [e.url, e]),
-      );
-      for (const entry of dayEntries) merged.set(entry.url, entry);
+        const merged = new Map<string, CatalogEntry>(
+          current.map((e) => [e.url, e]),
+        );
+        for (const entry of dayEntries) merged.set(entry.url, entry);
 
-      await writeDayIndex(date, Array.from(merged.values()));
-      added += dayEntries.length;
-      days.push(date);
+        await writeDayIndex(date, Array.from(merged.values()));
+        added += dayEntries.length;
+        days.push(date);
+      } catch (dayErr) {
+        console.error(`Failed to update index for ${date}:`, dayErr);
+        failed.push(date);
+      }
     }
 
     // New articles landed — expire the cached article list immediately so they
@@ -71,7 +85,13 @@ export async function POST(req: Request) {
       revalidateTag(ARCHIVE_LIST_TAG, { expire: 0 });
     }
 
-    return NextResponse.json({ success: true, added, days });
+    // Only a total failure (nothing written) is a 500; a partial success still
+    // reports the days that did commit so the caller isn't told everything failed.
+    const allFailed = days.length === 0 && failed.length > 0;
+    return NextResponse.json(
+      { success: !allFailed, added, days, failed },
+      { status: allFailed ? 500 : 200 },
+    );
   } catch (error) {
     const err = error as Error;
     console.error("Error in POST /api/index:", err);
