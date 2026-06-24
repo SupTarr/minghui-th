@@ -12,17 +12,29 @@ export async function POST(req: Request) {
       );
     }
 
-    const article = await req.json();
+    const article = await req.json().catch(() => null);
+    if (!article || typeof article !== "object") {
+      return NextResponse.json(
+        { error: "Request body must be a JSON object" },
+        { status: 400 },
+      );
+    }
+
     const { url, title_en, title_th, content_en, content_th, date, category } =
       article;
     // Fall back to the parent category when the list row had no sub-category.
     const articleCategory = category || "Cultivation";
 
-    if (!url || !title_en || !title_th || !content_en || !content_th || !date) {
-      return NextResponse.json(
-        { error: "Missing required article fields in request body" },
-        { status: 400 },
-      );
+    // Require each field to be a non-empty string so a malformed body fails with
+    // a 400 here (and url.match below never throws a TypeError on a non-string).
+    const required = { url, title_en, title_th, content_en, content_th, date };
+    for (const [field, value] of Object.entries(required)) {
+      if (typeof value !== "string" || value.length === 0) {
+        return NextResponse.json(
+          { error: `Missing or invalid article field: ${field}` },
+          { status: 400 },
+        );
+      }
     }
 
     // 1. Extract article ID from URL (e.g., 234818 from .../234818.html)

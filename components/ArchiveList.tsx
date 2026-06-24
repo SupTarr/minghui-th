@@ -16,6 +16,8 @@ interface ArchiveListProps {
   listArticles: Article[];
   visibleCount: number;
   loadingInitial: boolean;
+  archiveError: boolean;
+  onRetryArchive: () => void;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   loadMoreRef: RefObject<HTMLDivElement | null>;
   openArticle: (path: string) => void;
@@ -33,6 +35,8 @@ export default function ArchiveList({
   listArticles,
   visibleCount,
   loadingInitial,
+  archiveError,
+  onRetryArchive,
   scrollContainerRef,
   loadMoreRef,
   openArticle,
@@ -61,6 +65,8 @@ export default function ArchiveList({
       {/* Tab Toggles */}
       <div className="flex bg-[#0c1220]/60 p-1 border border-slate-900 rounded-xl">
         <button
+          type="button"
+          aria-pressed={activeTab === "archived"}
           onClick={() => setActiveTab("archived")}
           className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
             activeTab === "archived"
@@ -72,6 +78,8 @@ export default function ArchiveList({
           {archivedArticles.length})
         </button>
         <button
+          type="button"
+          aria-pressed={activeTab === "newly-synced"}
           onClick={() => setActiveTab("newly-synced")}
           className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
             activeTab === "newly-synced"
@@ -91,6 +99,7 @@ export default function ArchiveList({
         {loadingInitial && activeTab === "archived" ? (
           <div className="h-[250px] flex flex-col items-center justify-center text-slate-550 space-y-3">
             <svg
+              aria-hidden="true"
               className="animate-spin h-6 w-6 text-teal-500/70"
               viewBox="0 0 24 24"
               fill="none"
@@ -113,6 +122,19 @@ export default function ArchiveList({
               กำลังเชื่อมต่อข้อมูลคลัง...
             </span>
           </div>
+        ) : activeTab === "archived" && archiveError ? (
+          <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-red-500/30 rounded-2xl text-slate-400 space-y-3">
+            <span className="text-xs font-sans text-red-300/90">
+              โหลดคลังบทความไม่สำเร็จ — เซิร์ฟเวอร์ไม่ตอบสนอง
+            </span>
+            <button
+              type="button"
+              onClick={onRetryArchive}
+              className="text-3xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg border border-teal-500/30 text-teal-400 hover:bg-teal-500/10 transition-colors cursor-pointer"
+            >
+              ลองอีกครั้ง
+            </button>
+          </div>
         ) : activeTab === "archived" && archivedArticles.length === 0 ? (
           <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
             <span className="text-xs font-sans">
@@ -132,12 +154,14 @@ export default function ArchiveList({
             {listArticles
               .slice(0, visibleCount)
               .map((article: Article, idx: number) => (
-                <div
+                <button
+                  type="button"
                   key={article.filePath ?? article.url ?? idx}
+                  disabled={!article.filePath}
                   onClick={() =>
                     article.filePath && openArticle(article.filePath)
                   }
-                  className="p-4 rounded-xl bg-[#0c1220]/30 border border-slate-900 hover:border-teal-500/30 hover:bg-[#0c1220]/60 transition-all duration-300 group cursor-pointer shadow-xs active:scale-[0.99] animate-fade-in"
+                  className="w-full text-left p-4 rounded-xl bg-[#0c1220]/30 border border-slate-900 hover:border-teal-500/30 hover:bg-[#0c1220]/60 transition-all duration-300 group cursor-pointer shadow-xs active:scale-[0.99] animate-fade-in disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -151,6 +175,7 @@ export default function ArchiveList({
                       )}
                     </div>
                     <svg
+                      aria-hidden="true"
                       className="w-3.5 h-3.5 text-slate-600 group-hover:text-teal-400 transition-colors"
                       fill="none"
                       stroke="currentColor"
@@ -170,7 +195,7 @@ export default function ArchiveList({
                   <p className="text-3xs text-slate-500 font-sans line-clamp-1 mt-1.5 italic group-hover:text-slate-400 transition-colors">
                     {article.title_en}
                   </p>
-                </div>
+                </button>
               ))}
             {visibleCount < listArticles.length && (
               <div

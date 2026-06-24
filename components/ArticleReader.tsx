@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { ArticleDetails } from "@/components/types";
 
 // Parses markdown structures (headings, blockquotes, bullet lists, code blocks)
@@ -111,6 +112,7 @@ function renderContent(content: string, lang: "th" | "en") {
 interface ArticleReaderProps {
   articleContent: ArticleDetails | null;
   isLoadingArticle: boolean;
+  articleError: boolean;
   readerLanguage: "th" | "en" | "both";
   setReaderLanguage: (lang: "th" | "en" | "both") => void;
   closeArticle: () => void;
@@ -121,22 +123,99 @@ interface ArticleReaderProps {
 export default function ArticleReader({
   articleContent,
   isLoadingArticle,
+  articleError,
   readerLanguage,
   setReaderLanguage,
   closeArticle,
   handleCopyShareLink,
   copied,
 }: ArticleReaderProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  // Hold the latest closeArticle so the mount-only effect calls the current one
+  // without re-running (the parent re-renders often and passes a new identity).
+  // Updated in an effect, not during render, per the react-hooks/refs rule.
+  const closeRef = useRef(closeArticle);
+  useEffect(() => {
+    closeRef.current = closeArticle;
+  });
+
+  // Make the overlay a proper modal dialog: move focus in on open, trap Tab
+  // inside it, close on Escape, lock body scroll, and restore focus on close.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeButtonRef.current?.focus();
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+
+      const container = containerRef.current;
+      if (!container) return;
+      const focusable = Array.from(
+        container.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.offsetParent !== null);
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      const activeInside = active ? container.contains(active) : false;
+      if (!activeInside) {
+        // Focus drifted out of the dialog (e.g. to <body> after clicking
+        // selectable body text); a default Tab would land on the background
+        // controls still mounted behind the overlay. Pull it back in. Guarding
+        // only on Tab (not via focusin) keeps mouse text-selection uninterrupted.
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = prevOverflow;
+      previouslyFocused?.focus?.();
+    };
+    // Mount/unmount only — closeArticle is read via closeRef to avoid re-running
+    // (which would steal focus on every parent re-render). Only stable refs are
+    // referenced, so the empty dep list is exhaustive.
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-50 bg-[#060913]/98 overflow-y-auto backdrop-blur-xl flex flex-col animate-fade-in select-text">
+    <div
+      ref={containerRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="ตัวอ่านบทความ"
+      className="fixed inset-0 z-50 bg-[#060913]/98 overflow-y-auto backdrop-blur-xl flex flex-col animate-fade-in select-text"
+    >
       {/* Reader Header */}
       <div className="sticky top-0 bg-[#060913]/90 border-b border-slate-900/60 backdrop-blur-md z-30 px-4 py-3.5 sm:px-6 lg:px-8">
         <div className="max-w-5xl mx-auto flex items-center justify-between font-sans">
           <button
+            type="button"
+            ref={closeButtonRef}
             onClick={closeArticle}
             className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors font-semibold cursor-pointer"
           >
             <svg
+              aria-hidden="true"
               className="w-4 h-4"
               fill="none"
               stroke="currentColor"
@@ -153,8 +232,14 @@ export default function ArticleReader({
           </button>
 
           {articleContent && (
-            <div className="flex bg-[#060913] p-1 border border-slate-900 rounded-xl text-3xs font-mono">
+            <div
+              role="group"
+              aria-label="เลือกภาษาที่แสดง"
+              className="flex bg-[#060913] p-1 border border-slate-900 rounded-xl text-3xs font-mono"
+            >
               <button
+                type="button"
+                aria-pressed={readerLanguage === "th"}
                 onClick={() => setReaderLanguage("th")}
                 className={`px-3 py-1.5 rounded-lg transition-all font-semibold cursor-pointer ${
                   readerLanguage === "th"
@@ -165,6 +250,8 @@ export default function ArticleReader({
                 ภาษาไทย
               </button>
               <button
+                type="button"
+                aria-pressed={readerLanguage === "en"}
                 onClick={() => setReaderLanguage("en")}
                 className={`px-3 py-1.5 rounded-lg transition-all font-semibold cursor-pointer ${
                   readerLanguage === "en"
@@ -175,6 +262,8 @@ export default function ArticleReader({
                 English
               </button>
               <button
+                type="button"
+                aria-pressed={readerLanguage === "both"}
                 onClick={() => setReaderLanguage("both")}
                 className={`px-3 py-1.5 rounded-lg transition-all font-semibold cursor-pointer ${
                   readerLanguage === "both"
@@ -195,6 +284,7 @@ export default function ArticleReader({
             {copied ? (
               <>
                 <svg
+                  aria-hidden="true"
                   className="w-3.5 h-3.5"
                   fill="none"
                   stroke="currentColor"
@@ -212,6 +302,7 @@ export default function ArticleReader({
             ) : (
               <>
                 <svg
+                  aria-hidden="true"
                   className="w-3.5 h-3.5"
                   fill="none"
                   stroke="currentColor"
@@ -236,6 +327,7 @@ export default function ArticleReader({
         {/* Watermark Lotus Flower in background */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02] select-none">
           <svg
+            aria-hidden="true"
             className="w-[500px] h-[500px]"
             viewBox="0 0 100 100"
             fill="none"
@@ -251,6 +343,7 @@ export default function ArticleReader({
         {isLoadingArticle ? (
           <div className="h-[60vh] flex flex-col items-center justify-center text-slate-550 space-y-4 relative z-10 font-sans">
             <svg
+              aria-hidden="true"
               className="animate-spin h-8 w-8 text-teal-500"
               fill="none"
               viewBox="0 0 24 24"
@@ -338,7 +431,11 @@ export default function ArticleReader({
           </article>
         ) : (
           <div className="py-20 text-center text-slate-500 border border-dashed border-slate-800 rounded-2xl">
-            <p className="text-sm">ไม่พบข้อมูลของบทความนี้</p>
+            <p className="text-sm">
+              {articleError
+                ? "โหลดบทความไม่สำเร็จ — โปรดลองอีกครั้ง"
+                : "ไม่พบข้อมูลของบทความนี้"}
+            </p>
           </div>
         )}
       </div>

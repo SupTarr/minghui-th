@@ -1,3 +1,16 @@
+import { timingSafeEqual } from "node:crypto";
+
+// Constant-time string compare so the shared CRON_SECRET check doesn't leak how
+// many leading bytes matched via response timing. Length is compared first
+// (timingSafeEqual throws on unequal-length buffers); that only leaks the
+// secret's length, which is not sensitive.
+function safeEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a, "utf8");
+  const bBuf = Buffer.from(b, "utf8");
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
+
 export async function verifyGoogleToken(
   idToken: string,
 ): Promise<string | null> {
@@ -43,7 +56,7 @@ export async function authorize(req: Request): Promise<AuthResult> {
   const authHeader = req.headers.get("Authorization");
   if (authHeader) {
     const token = authHeader.replace("Bearer ", "").trim();
-    if (process.env.CRON_SECRET && token === process.env.CRON_SECRET) {
+    if (process.env.CRON_SECRET && safeEqual(token, process.env.CRON_SECRET)) {
       return { authorized: true };
     }
   }
