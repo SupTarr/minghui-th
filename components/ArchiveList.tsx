@@ -14,12 +14,14 @@ interface ArchiveListProps {
   archivedArticles: Article[];
   newlySynced: Article[];
   listArticles: Article[];
-  visibleCount: number;
+  currentPage: number;
+  setCurrentPage: (page: number) => void;
+  pageSize: number;
+  totalPages: number;
   loadingInitial: boolean;
   archiveError: boolean;
   onRetryArchive: () => void;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
-  loadMoreRef: RefObject<HTMLDivElement | null>;
   openArticle: (path: string) => void;
 }
 
@@ -33,14 +35,22 @@ export default function ArchiveList({
   archivedArticles,
   newlySynced,
   listArticles,
-  visibleCount,
+  currentPage,
+  setCurrentPage,
+  pageSize,
+  totalPages,
   loadingInitial,
   archiveError,
   onRetryArchive,
   scrollContainerRef,
-  loadMoreRef,
   openArticle,
 }: ArchiveListProps) {
+  function goToPage(page: number) {
+    setCurrentPage(page);
+    // Jump back to the top of the list so the new page starts in view.
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   return (
     <section className="lg:col-span-6 flex flex-col space-y-4 lg:sticky lg:top-24 h-auto lg:h-[calc(100vh-140px)] min-h-[500px]">
       <div className="flex items-center justify-between">
@@ -152,7 +162,7 @@ export default function ArchiveList({
         ) : (
           <>
             {listArticles
-              .slice(0, visibleCount)
+              .slice((currentPage - 1) * pageSize, currentPage * pageSize)
               .map((article: Article, idx: number) => (
                 <button
                   type="button"
@@ -197,14 +207,27 @@ export default function ArchiveList({
                   </p>
                 </button>
               ))}
-            {visibleCount < listArticles.length && (
-              <div
-                ref={loadMoreRef}
-                className="py-4 flex items-center justify-center"
-              >
-                <span className="text-3xs text-slate-550 font-mono uppercase tracking-wider">
-                  แสดงเพิ่มเติม ({visibleCount}/{listArticles.length})
+            {totalPages > 1 && (
+              <div className="pt-2 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage <= 1}
+                  className="text-3xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg border border-slate-850 text-slate-400 hover:border-teal-500/30 hover:text-teal-400 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default disabled:hover:border-slate-850 disabled:hover:text-slate-400"
+                >
+                  ← ก่อนหน้า
+                </button>
+                <span className="text-3xs text-slate-550 font-mono uppercase tracking-wider shrink-0">
+                  หน้า {currentPage} / {totalPages}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage >= totalPages}
+                  className="text-3xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg border border-slate-850 text-slate-400 hover:border-teal-500/30 hover:text-teal-400 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default disabled:hover:border-slate-850 disabled:hover:text-slate-400"
+                >
+                  ถัดไป →
+                </button>
               </div>
             )}
           </>
