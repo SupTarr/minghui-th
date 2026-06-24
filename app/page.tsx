@@ -649,7 +649,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#060913] text-[#f8fafc] font-sans selection:bg-teal-500 selection:text-slate-955 relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#060913] text-[#f8fafc] font-sans selection:bg-teal-500 selection:text-slate-950 relative overflow-x-hidden">
       {/* Background glow effects - soft and meditative */}
       <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-teal-500/[0.03] rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[20%] right-[10%] w-[600px] h-[600px] bg-indigo-500/[0.03] rounded-full blur-[150px] pointer-events-none" />
@@ -663,7 +663,7 @@ export default function Dashboard() {
             className={`mb-6 p-4 rounded-2xl border flex items-center justify-between animate-fade-in ${
               newCount > 0
                 ? "bg-teal-500/10 border-teal-500/20 text-teal-300"
-                : "bg-slate-900/40 border-slate-900 text-slate-455"
+                : "bg-slate-900/40 border-slate-900 text-slate-400"
             }`}
           >
             <div className="flex items-center gap-2.5">
@@ -672,7 +672,7 @@ export default function Dashboard() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-teal-400" />
                 )}
                 <span
-                  className={`relative inline-flex rounded-full h-2 w-2 ${newCount > 0 ? "bg-teal-500" : "bg-slate-650"}`}
+                  className={`relative inline-flex rounded-full h-2 w-2 ${newCount > 0 ? "bg-teal-500" : "bg-slate-600"}`}
                 />
               </span>
               <p className="text-xs font-semibold font-sans">

@@ -81,7 +81,7 @@ export default function ArchiveList({
           className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
             activeTab === "archived"
               ? "bg-[#14b8a6]/10 text-teal-400 font-bold border border-teal-500/15"
-              : "text-slate-455 hover:text-slate-200"
+              : "text-slate-400 hover:text-slate-200"
           }`}
         >
           {startDate ? "ช่วงวันที่เลือก" : "7 วันล่าสุด"} (
@@ -94,7 +94,7 @@ export default function ArchiveList({
           className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
             activeTab === "newly-synced"
               ? "bg-[#14b8a6]/10 text-teal-400 font-bold border border-teal-500/15"
-              : "text-slate-455 hover:text-slate-200"
+              : "text-slate-400 hover:text-slate-200"
           }`}
         >
           แปลรอบนี้ ({newlySynced.length})
@@ -107,7 +107,7 @@ export default function ArchiveList({
         className="flex-1 overflow-y-auto scrollbar-thin pr-1 space-y-3 pb-6"
       >
         {loadingInitial && activeTab === "archived" ? (
-          <div className="h-[250px] flex flex-col items-center justify-center text-slate-550 space-y-3">
+          <div className="h-[250px] flex flex-col items-center justify-center text-slate-500 space-y-3">
             <svg
               aria-hidden="true"
               className="animate-spin h-6 w-6 text-teal-500/70"
@@ -128,7 +128,7 @@ export default function ArchiveList({
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               />
             </svg>
-            <span className="text-3xs uppercase tracking-wider text-slate-555 font-mono">
+            <span className="text-3xs uppercase tracking-wider text-slate-500 font-mono">
               กำลังเชื่อมต่อข้อมูลคลัง...
             </span>
           </div>
@@ -175,7 +175,7 @@ export default function ArchiveList({
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-3xs font-mono bg-slate-900/80 px-2 py-0.5 rounded text-slate-450 border border-slate-850 shrink-0">
+                      <span className="text-3xs font-mono bg-slate-900/80 px-2 py-0.5 rounded text-slate-400 border border-slate-800 shrink-0">
                         {article.date}
                       </span>
                       {article.category && (
@@ -213,18 +213,18 @@ export default function ArchiveList({
                   type="button"
                   onClick={() => goToPage(currentPage - 1)}
                   disabled={currentPage <= 1}
-                  className="text-3xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg border border-slate-850 text-slate-400 hover:border-teal-500/30 hover:text-teal-400 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default disabled:hover:border-slate-850 disabled:hover:text-slate-400"
+                  className="text-3xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg border border-slate-800 text-slate-400 hover:border-teal-500/30 hover:text-teal-400 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default disabled:hover:border-slate-800 disabled:hover:text-slate-400"
                 >
                   ← ก่อนหน้า
                 </button>
-                <span className="text-3xs text-slate-550 font-mono uppercase tracking-wider shrink-0">
+                <span className="text-3xs text-slate-500 font-mono uppercase tracking-wider shrink-0">
                   หน้า {currentPage} / {totalPages}
                 </span>
                 <button
                   type="button"
                   onClick={() => goToPage(currentPage + 1)}
                   disabled={currentPage >= totalPages}
-                  className="text-3xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg border border-slate-850 text-slate-400 hover:border-teal-500/30 hover:text-teal-400 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default disabled:hover:border-slate-850 disabled:hover:text-slate-400"
+                  className="text-3xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg border border-slate-800 text-slate-400 hover:border-teal-500/30 hover:text-teal-400 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default disabled:hover:border-slate-800 disabled:hover:text-slate-400"
                 >
                   ถัดไป →
                 </button>

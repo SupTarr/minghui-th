@@ -52,7 +52,7 @@ export default function SyncControls({
         {/* System State Info Description */}
         <div className="text-center w-full px-2 mb-6">
           {!isSyncing ? (
-            <p className="text-2xs text-slate-455 leading-relaxed font-sans">
+            <p className="text-2xs text-slate-400 leading-relaxed font-sans">
               ระบบพร้อมสำหรับการเริ่มดึงข้อมูล (Scraping) แปลความด้วย AI (Gemini
               Translator) และนำเข้าบัญชีจัดเก็บ Google Drive ของระบบแบบเรียลไทม์
             </p>
@@ -97,14 +97,14 @@ export default function SyncControls({
               <div className="flex items-center justify-between bg-[#060913] border border-slate-900 px-3.5 py-2.5 rounded-xl text-3xs">
                 <div className="flex items-center gap-1.5 truncate max-w-[70%]">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-opacity" />
-                  <span className="text-slate-350 font-mono truncate">
+                  <span className="text-slate-300 font-mono truncate">
                     {userEmail}
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="text-rose-450 hover:text-rose-350 font-bold cursor-pointer transition-colors"
+                  className="text-rose-400 hover:text-rose-300 font-bold cursor-pointer transition-colors"
                 >
                   Sign Out
                 </button>
@@ -117,10 +117,10 @@ export default function SyncControls({
                 <div className="flex gap-2 w-full">
                   <button
                     disabled
-                    className="flex-1 py-3 px-4 rounded-xl font-bold text-xs bg-slate-900 text-slate-550 border border-slate-900 flex items-center justify-center gap-2 cursor-not-allowed font-sans"
+                    className="flex-1 py-3 px-4 rounded-xl font-bold text-xs bg-slate-900 text-slate-500 border border-slate-900 flex items-center justify-center gap-2 cursor-not-allowed font-sans"
                   >
                     <svg
-                      className="animate-spin h-4 w-4 text-slate-550"
+                      className="animate-spin h-4 w-4 text-slate-500"
                       fill="none"
                       viewBox="0 0 24 24"
                     >
