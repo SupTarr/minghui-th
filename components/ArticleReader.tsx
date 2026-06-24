@@ -9,7 +9,7 @@ import type { ArticleDetails } from "@/components/types";
 function renderInline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
   const re =
-    /\*\*([^*]+)\*\*|\*([^*\n]+)\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+    /\*\*\*([^*]+)\*\*\*|\*\*([^*]+)\*\*|\*([^*\n]+)\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
   let last = 0;
   let key = 0;
   let m: RegExpExecArray | null;
@@ -23,22 +23,28 @@ function renderInline(text: string): ReactNode[] {
     if (m.index > last) pushText(text.slice(last, m.index));
     if (m[1] !== undefined) {
       out.push(
-        <strong key={`b${key++}`} className="font-semibold text-slate-100">
-          {m[1]}
+        <strong key={`bi${key++}`} className="font-semibold text-slate-100">
+          <em>{m[1]}</em>
         </strong>,
       );
     } else if (m[2] !== undefined) {
-      out.push(<em key={`i${key++}`}>{m[2]}</em>);
+      out.push(
+        <strong key={`b${key++}`} className="font-semibold text-slate-100">
+          {m[2]}
+        </strong>,
+      );
+    } else if (m[3] !== undefined) {
+      out.push(<em key={`i${key++}`}>{m[3]}</em>);
     } else {
       out.push(
         <a
           key={`a${key++}`}
-          href={m[4]}
+          href={m[5]}
           target="_blank"
           rel="noopener noreferrer"
           className="text-indigo-400 underline decoration-dotted underline-offset-2 hover:text-indigo-300"
         >
-          {renderInline(m[3])}
+          {renderInline(m[4])}
         </a>,
       );
     }
