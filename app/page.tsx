@@ -58,12 +58,10 @@ export default function Dashboard() {
     return `${yyyy}-${mm}-${dd}`;
   });
 
-  // Pagination for the archive list — render in chunks so a large catalog
-  // (1000+ articles) doesn't mount thousands of card nodes at once.
-  const PAGE_SIZE = 60;
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  // Paginate the archive list — 5 articles per page with prev/next controls.
+  const PAGE_SIZE = 5;
+  const [currentPage, setCurrentPage] = useState(1);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const listArticles = useMemo(() => {
     // The archive list is already date-scoped by the server fetch, so the
@@ -78,24 +76,16 @@ export default function Dashboard() {
   const [prevViewKey, setPrevViewKey] = useState(viewKey);
   if (viewKey !== prevViewKey) {
     setPrevViewKey(viewKey);
-    setVisibleCount(PAGE_SIZE);
+    setCurrentPage(1);
   }
 
-  // Reveal the next chunk as the sentinel scrolls into view
-  useEffect(() => {
-    const el = loadMoreRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setVisibleCount((c) => (c < listArticles.length ? c + PAGE_SIZE : c));
-        }
-      },
-      { root: scrollContainerRef.current, rootMargin: "300px" },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [listArticles.length, visibleCount]);
+  // Clamp the page during render so a shrinking list (e.g. the sync resetting
+  // newlySynced to []) can never strand the view on a now-empty page.
+  const totalPages = Math.max(1, Math.ceil(listArticles.length / PAGE_SIZE));
+  const clampedPage = Math.min(currentPage, totalPages);
+  if (clampedPage !== currentPage) {
+    setCurrentPage(clampedPage);
+  }
 
   const [readingArticlePath, setReadingArticlePath] = useState<string | null>(
     null,
@@ -712,7 +702,10 @@ export default function Dashboard() {
             archivedArticles={archivedArticles}
             newlySynced={newlySynced}
             listArticles={listArticles}
-            visibleCount={visibleCount}
+            currentPage={clampedPage}
+            setCurrentPage={setCurrentPage}
+            pageSize={PAGE_SIZE}
+            totalPages={totalPages}
             loadingInitial={loadingInitial}
             archiveError={archiveError}
             onRetryArchive={() =>
@@ -722,7 +715,6 @@ export default function Dashboard() {
               )
             }
             scrollContainerRef={scrollContainerRef}
-            loadMoreRef={loadMoreRef}
             openArticle={openArticle}
           />
 
