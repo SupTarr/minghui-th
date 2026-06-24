@@ -66,6 +66,17 @@ function inlineMarkdown($: cheerio.CheerioAPI, el: AnyNode): string {
   return out;
 }
 
+/**
+ * Drop inline emphasis/link *markers* (keeping link text) from a string. Used
+ * for contexts whose own styling already conveys emphasis — headings (rendered
+ * bold) and image captions (rendered italic) — where Minghui additionally wraps
+ * the text in <strong>/<em>, which would otherwise stack into unparseable runs
+ * like `**…** ***Zhuan Falun***` that render as literal asterisks.
+ */
+function stripInlineMarkers(s: string): string {
+  return s.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\*+/g, "");
+}
+
 /** Absolute http(s) URL for a link, or null for tooltip/anchor/scheme-only hrefs. */
 function resolveHref(href: string | undefined): string | null {
   const h = href?.trim();
@@ -166,15 +177,17 @@ export function parseArticleHtml(html: string): ParsedArticle {
       element.hasClass("quote") ||
       element.closest(".quote").length > 0;
 
-    // Convert elements to standard markdown indicators for formatting.
+    // Convert elements to standard markdown indicators for formatting. Headings
+    // are styled bold by the renderer, so strip the redundant inline emphasis
+    // Minghui wraps them in (otherwise `### **…** ***title***` leaks asterisks).
     if (tagName === "h1") {
-      text = `# ${text}`;
+      text = `# ${stripInlineMarkers(text)}`;
     } else if (tagName === "h2") {
-      text = `## ${text}`;
+      text = `## ${stripInlineMarkers(text)}`;
     } else if (tagName === "h3") {
-      text = `### ${text}`;
+      text = `### ${stripInlineMarkers(text)}`;
     } else if (tagName.startsWith("h")) {
-      text = `#### ${text}`;
+      text = `#### ${stripInlineMarkers(text)}`;
     } else if (isQuote) {
       // Prefix every line so a multi-line poem stays one blockquote.
       text = text
@@ -182,10 +195,14 @@ export function parseArticleHtml(html: string): ParsedArticle {
         .map((line) => `> ${line}`)
         .join("\n");
     } else if (isCaption) {
-      // The image itself can't survive into a text translation; keep its
-      // caption as italic context. Per line so a 2-line caption stays valid.
+      // The image can't survive into a text translation; keep its caption as
+      // italic context. The whole line is already italic, so strip any inner
+      // emphasis (an inner *title* would collide into malformed `*… *title**`);
+      // wrap once per line.
       text = text
         .split("\n")
+        .map((line) => stripInlineMarkers(line).trim())
+        .filter(Boolean)
         .map((line) => `*${line}*`)
         .join("\n");
     } else if (tagName === "li") {

@@ -39,8 +39,8 @@ const FIXTURE = `
         <span class="section">Second line after a break.</span>
       </p>
 
-      <!-- Image caption: splitted + image-container -> kept as italic context -->
-      <p class="splitted image-container">Master's portrait at the conference (Minghui.org)</p>
+      <!-- Image caption with an inner <em> book title: must not double-wrap -->
+      <p class="splitted image-container">Master's portrait near <em>Zhuan Falun</em> at the conference (Minghui.org)</p>
 
       <!-- Trailing metadata: splitted + "published on" -> dropped -->
       <p class="splitted">Original article was published on June 29, 2023.</p>
@@ -102,10 +102,12 @@ describe("parseArticleHtml", () => {
     expect(content_en).toContain("Second line after a break.");
   });
 
-  it("keeps image captions as italic context", () => {
+  it("keeps image captions as a single clean italic line (no nested markers)", () => {
+    // Inner <em> must be flattened, not double-wrapped into `*… *Zhuan Falun**`.
     expect(content_en).toContain(
-      "*Master's portrait at the conference (Minghui.org)*",
+      "*Master's portrait near Zhuan Falun at the conference (Minghui.org)*",
     );
+    expect(content_en).not.toContain("*Zhuan Falun**");
   });
 
   it("drops trailing metadata and copyright", () => {
