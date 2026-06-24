@@ -136,39 +136,66 @@ export async function getRootFolderId(drive: drive_v3.Drive): Promise<string> {
   return cachedRootFolderId;
 }
 
+// Drive allows multiple folders with the same name under one parent, so the
+// check-then-create in createFolder is NOT safe to run concurrently for the
+// same folder: N parallel callers all miss the existence check and each create
+// a duplicate `YYYY-MM-DD` folder, splitting that day's article files and
+// index.json across the duplicates → articles silently vanish from the site.
+// The cron fans saves out in-process within a single Node instance, so an
+// in-process singleflight (no await between the get and set below, so two
+// callers can't both pass the check) collapses concurrent calls for the same
+// (parent, name) into one list+create; the rest await the same result.
+const inflightFolderCreates = new Map<string, Promise<string>>();
+
 /**
  * Checks if a folder exists inside a parent folder, and creates it if it doesn't.
- * Returns the folder ID.
+ * Returns the folder ID. Concurrency-safe for the same (parent, name).
  */
 export async function createFolder(
   folderName: string,
   parentId: string,
 ): Promise<string> {
-  const drive = initDrive();
+  const key = `${parentId}/${folderName}`;
+  const inflight = inflightFolderCreates.get(key);
+  if (inflight) return inflight;
 
-  // Search for existing folder
-  const query = `mimeType = 'application/vnd.google-apps.folder' and name = '${folderName}' and '${parentId}' in parents and trashed = false`;
-  const listRes = await drive.files.list(
-    getListParams(query, "files(id, name)"),
-  );
+  const promise = (async (): Promise<string> => {
+    const drive = initDrive();
 
-  const files = listRes.data.files;
-  if (files && files.length > 0) {
-    return files[0].id!;
+    // Search for existing folder
+    const query = `mimeType = 'application/vnd.google-apps.folder' and name = '${folderName}' and '${parentId}' in parents and trashed = false`;
+    const listRes = await drive.files.list(
+      getListParams(query, "files(id, name)"),
+    );
+
+    const files = listRes.data.files;
+    if (files && files.length > 0) {
+      return files[0].id!;
+    }
+
+    // Create new folder
+    const folder = await drive.files.create({
+      supportsAllDrives: true,
+      requestBody: {
+        name: folderName,
+        mimeType: "application/vnd.google-apps.folder",
+        parents: [parentId],
+      },
+      fields: "id",
+    });
+
+    return folder.data.id!;
+  })();
+
+  inflightFolderCreates.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    // Pure singleflight: drop the entry once settled so the next call re-checks
+    // Drive (and now finds the folder we just created) rather than caching a
+    // possibly-stale ID for the process lifetime.
+    inflightFolderCreates.delete(key);
   }
-
-  // Create new folder
-  const folder = await drive.files.create({
-    supportsAllDrives: true,
-    requestBody: {
-      name: folderName,
-      mimeType: "application/vnd.google-apps.folder",
-      parents: [parentId],
-    },
-    fields: "id",
-  });
-
-  return folder.data.id!;
 }
 
 /**
