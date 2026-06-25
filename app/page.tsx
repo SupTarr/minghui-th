@@ -29,6 +29,25 @@ interface WindowWithGoogle extends Window {
   };
 }
 
+// Derive the YYYY-MM-DD date from a minghui article URL
+// (e.g. .../articles/2026/6/26/234818.html → 2026-06-26). Mirrors the parser in
+// app/api/scrape/route.ts. Falls back to today only as a safety net — minghui
+// article URLs always carry the date in the path.
+function parseDateFromArticleUrl(url: string): string {
+  const match = url.match(
+    /\/articles\/(\d{4})\/(\d{1,2})\/(\d{1,2})\/\d+\.html/,
+  );
+  if (match) {
+    const [, yyyy, mm, dd] = match;
+    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  }
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export default function Dashboard() {
   const [archivedArticles, setArchivedArticles] = useState<Article[]>([]);
   const [newlySynced, setNewlySynced] = useState<Article[]>([]);
@@ -36,6 +55,9 @@ export default function Dashboard() {
     "archived" | "newly-synced" | "needs-review"
   >("archived");
   const [isSyncing, setIsSyncing] = useState(false);
+  // Single-article import: paste a URL → translate → save → index (one item).
+  const [importUrl, setImportUrl] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
   const [newCount, setNewCount] = useState<number | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [progressPercent, setProgressPercent] = useState(0);
@@ -463,7 +485,7 @@ export default function Dashboard() {
   }, [logs]);
 
   async function handleSync() {
-    if (isSyncing) return;
+    if (isSyncing || isImporting) return;
 
     setIsSyncing(true);
     isCancelledRef.current = false;
@@ -721,6 +743,167 @@ export default function Dashboard() {
     }
   }
 
+  // Import a single article by its URL — one handleSync iteration without the
+  // scrape: translate → save → index, then surface it like a synced article.
+  async function handleImportUrl() {
+    if (isImporting || isSyncing) return;
+
+    const url = importUrl.trim();
+    if (!url) return;
+
+    // The link must be an article URL ending in /<id>.html — that's the shape
+    // /api/save needs to derive the article ID and the date parser expects.
+    // Reject a section page or a fat-fingered paste before hitting the network.
+    if (!/^https?:\/\/.+\/\d+\.html(?:[?#].*)?$/i.test(url)) {
+      addLog(
+        "❌ ลิงก์ไม่ถูกต้อง — กรุณาวางลิงก์บทความของ Minghui ที่ลงท้ายด้วยรหัสบทความ เช่น .../234818.html",
+      );
+      return;
+    }
+
+    setIsImporting(true);
+    setActiveTab("newly-synced");
+
+    try {
+      addLog(`กำลังนำเข้าบทความจากลิงก์: ${url}`);
+      setStatusMessage("กำลังนำเข้าบทความจากลิงก์...");
+
+      const date = parseDateFromArticleUrl(url);
+
+      // --- Translation Step --- (/api/translate fetches & parses the page itself)
+      const transRes = await fetch("/api/translate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Google-ID-Token": googleIdToken || "",
+        },
+        body: JSON.stringify({ url }),
+      });
+      if (transRes.status === 401 || transRes.status === 403) {
+        throw new Error(`Unauthorized:${transRes.status}`);
+      }
+      if (!transRes.ok) {
+        const detail = await transRes
+          .json()
+          .then((d) => (d?.error ? `: ${d.error}` : ""))
+          .catch(() => "");
+        throw new Error(`แปลบทความไม่สำเร็จ (สถานะ ${transRes.status})${detail}`);
+      }
+
+      const transData = await transRes.json();
+      addLog(`✨ แปลสำเร็จ: "${transData.title_th}"`);
+
+      // --- Save Step ---
+      setStatusMessage(`กำลังบันทึก: ${transData.title_th}`);
+      addLog("กำลังบันทึกบทความลง Google Drive...");
+
+      const saveRes = await fetch("/api/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Google-ID-Token": googleIdToken || "",
+        },
+        body: JSON.stringify({
+          url,
+          title_en: transData.title_en,
+          title_th: transData.title_th,
+          content_en: transData.content_en,
+          content_th: transData.content_th,
+          date,
+          // A manual import has no scraped sub-category; /api/save also defaults
+          // this to "Cultivation", but we send it explicitly to be unambiguous.
+          category: "Cultivation",
+          validation: transData.validation,
+        }),
+      });
+      if (saveRes.status === 401 || saveRes.status === 403) {
+        throw new Error(`Unauthorized:${saveRes.status}`);
+      }
+      if (!saveRes.ok) {
+        const detail = await saveRes
+          .json()
+          .then((d) => (d?.error ? `: ${d.error}` : ""))
+          .catch(() => "");
+        throw new Error(`บันทึกบทความไม่สำเร็จ (สถานะ ${saveRes.status})${detail}`);
+      }
+
+      const saveData = await saveRes.json();
+      addLog(`💾 บันทึกสำเร็จ: ${saveData.filePath}`);
+
+      const importedArticle: Article = {
+        url,
+        title_en: transData.title_en,
+        title_th: transData.title_th,
+        date,
+        category: saveData.entry?.category ?? "Cultivation",
+        filePath: saveData.filePath,
+        status: saveData.entry?.status,
+        statusDesc: saveData.entry?.statusDesc,
+      };
+
+      // Dedupe before prepending so re-importing the same URL can't double-insert
+      // a card with the same React key (matches the sync loop's behavior).
+      const dedupePrepend = (prev: Article[]) => [
+        importedArticle,
+        ...prev.filter(
+          (a) =>
+            a.filePath !== importedArticle.filePath &&
+            a.url !== importedArticle.url,
+        ),
+      ];
+      setNewlySynced(dedupePrepend);
+      setArchivedArticles(dedupePrepend);
+
+      // Write the per-day index entry. A failed index write only costs a
+      // re-translation on the next sync (dedup self-heals), so warn and continue.
+      try {
+        const indexRes = await fetch("/api/index", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Google-ID-Token": googleIdToken || "",
+          },
+          body: JSON.stringify({ entries: [importedArticle] }),
+        });
+        if (!indexRes.ok) {
+          throw new Error(`Status ${indexRes.status}`);
+        }
+        addLog("🗂️ อัปเดตดัชนีคลังบทความแล้ว");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        addLog(
+          `⚠️ อัปเดตดัชนีคลังล้มเหลว (${msg}) — บทความถูกบันทึกแล้ว ระบบจะเพิ่มลงดัชนีอัตโนมัติในการซิงค์ครั้งถัดไป`,
+        );
+      }
+
+      setStatusMessage("นำเข้าบทความเสร็จสมบูรณ์!");
+      addLog("🎉 นำเข้าบทความจากลิงก์เสร็จสมบูรณ์แล้ว!");
+      setImportUrl("");
+    } catch (error) {
+      const err = error as Error;
+      console.error(err);
+      const authMatch = err.message?.match(/Unauthorized:(\d+)/);
+      if (authMatch) {
+        if (authMatch[1] === "403") {
+          addLog(
+            `❌ อีเมล ${userEmail ?? "นี้"} ไม่อยู่ในรายชื่อที่ได้รับอนุญาตให้ใช้งานระบบ — โปรดติดต่อผู้ดูแลเพื่อขอสิทธิ์`,
+          );
+          setStatusMessage("อีเมลไม่ได้รับอนุญาต");
+        } else {
+          addLog(
+            "❌ เซสชันหมดอายุหรือไม่ถูกต้อง — กรุณากด Sign Out แล้วลงชื่อเข้าใช้ใหม่อีกครั้ง",
+          );
+          setStatusMessage("เซสชันหมดอายุ");
+        }
+      } else {
+        setStatusMessage("เกิดข้อผิดพลาดในการนำเข้าบทความ");
+        addLog(`❌ ข้อผิดพลาด: ${err.message || String(err)}`);
+      }
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#060913] text-[#f8fafc] font-sans selection:bg-teal-500 selection:text-slate-950 relative overflow-x-hidden">
       {/* Background glow effects - soft and meditative */}
@@ -816,6 +999,10 @@ export default function Dashboard() {
             handleSync={handleSync}
             handleCancel={handleCancel}
             handleSignOut={handleSignOut}
+            importUrl={importUrl}
+            setImportUrl={setImportUrl}
+            isImporting={isImporting}
+            handleImportUrl={handleImportUrl}
           />
         </div>
       </main>
