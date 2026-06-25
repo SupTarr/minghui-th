@@ -75,6 +75,7 @@ export async function POST(req: Request) {
       title_en: string;
       date: string;
       category: string;
+      subcategory?: string;
     }> = [];
 
     // Select recent articles list elements
@@ -93,10 +94,16 @@ export async function POST(req: Request) {
 
       // The .category-article-date div holds "June 23, 2026 | Journeys of
       // Cultivation": left of the pipe is the date, right is the sub-category.
+      // This listing only covers the Cultivation section (/cc/24/), so the
+      // top-level category is "Cultivation" and the listed label is the leaf.
+      // These are provisional — /api/translate re-derives both from the
+      // article's own breadcrumb (the authoritative source); they're the
+      // pre-translate card preview and the fallback if that parse comes up empty.
       const metaText = a.find(".category-article-date").text().trim();
       const pipeIdx = metaText.indexOf("|");
       const dateText = pipeIdx === -1 ? metaText : metaText.slice(0, pipeIdx);
-      const category = pipeIdx === -1 ? "" : metaText.slice(pipeIdx + 1).trim();
+      const subcategory =
+        pipeIdx === -1 ? undefined : metaText.slice(pipeIdx + 1).trim();
 
       // Prefer the date embedded in the URL; fall back to the listed date text.
       let date = parseDateFromUrl(href);
@@ -115,7 +122,13 @@ export async function POST(req: Request) {
       }
 
       if (title_en && url) {
-        articles.push({ url, title_en, date, category });
+        articles.push({
+          url,
+          title_en,
+          date,
+          category: "Cultivation",
+          subcategory,
+        });
       }
     });
 

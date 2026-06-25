@@ -437,6 +437,11 @@ export default function ArticleReader({
                 <span className="bg-indigo-500/10 text-indigo-400 px-2.5 py-0.5 rounded-md border border-indigo-500/15">
                   {articleContent.category}
                 </span>
+                {articleContent.subcategory && (
+                  <span className="bg-teal-500/10 text-teal-400 px-2.5 py-0.5 rounded-md border border-teal-500/15">
+                    {articleContent.subcategory}
+                  </span>
+                )}
                 <a
                   href={articleContent.url}
                   target="_blank"

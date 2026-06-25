@@ -333,6 +333,47 @@ export function parseArticleHtml(html: string): ParsedArticle {
   return { title_en, content_en };
 }
 
+/** Separator joining the levels of a multi-level sub-category path. */
+export const CATEGORY_SEPARATOR = " › ";
+
+/** A Minghui article's category hierarchy, read from its breadcrumb. */
+export interface ArticleCategory {
+  /** Top-level section, e.g. "Cultivation" / "News & Events". Undefined when the page has no breadcrumb. */
+  category?: string;
+  /**
+   * Everything below the top level, as a single path. One level →
+   * "Cultivation Insights"; deeper → "World Falun Dafa Day › Dafa Day
+   * Perspectives". Undefined when the breadcrumb has only the top level.
+   */
+  subcategory?: string;
+}
+
+/**
+ * Read the category hierarchy from a Minghui article's breadcrumb
+ * (`Home > <Section> > <Sub> [> <Sub-sub> …]`). The breadcrumb's section links
+ * point at `/cc/<id>/` pages; the `Home` link (href "/") is excluded by matching
+ * only that shape. The first section link is the top-level `category`; every
+ * level below it is joined with {@link CATEGORY_SEPARATOR} into `subcategory`,
+ * so a 3+-level path (e.g. News & Events) keeps its full chain instead of
+ * skipping the middle. Returns `{}` when the page has no breadcrumb (e.g. some
+ * scripture pages) — never throws, so callers fall back to their own default
+ * (/api/save → "Cultivation").
+ */
+export function parseBreadcrumb(html: string): ArticleCategory {
+  const $ = cheerio.load(html);
+  const links = $(".bread-crumb a")
+    .toArray()
+    .filter((a) => /^\/cc\/\d+\/?$/.test($(a).attr("href") ?? ""))
+    .map((a) => $(a).text().replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  if (links.length === 0) return {};
+  return {
+    category: links[0],
+    subcategory:
+      links.length > 1 ? links.slice(1).join(CATEGORY_SEPARATOR) : undefined,
+  };
+}
+
 /**
  * Plain-text length (whitespace-stripped) of a source article's body container,
  * for the content validator's completeness heuristic. Mirrors the body selection

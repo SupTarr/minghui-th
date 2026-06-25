@@ -42,6 +42,7 @@ type Article = {
   title_en: string;
   date: string;
   category: string;
+  subcategory?: string;
 };
 type ArticleResult = { url: string; filePath: string; entry: unknown };
 
@@ -98,9 +99,11 @@ async function processArticle(
         content_en: translation.content_en,
         content_th: translation.content_th,
         date: article.date,
-        // Forward the scraped sub-category; without it /api/save falls back to
-        // "Cultivation" and every auto-synced article is mislabeled.
-        category: article.category,
+        // Prefer the breadcrumb-derived hierarchy from /api/translate; fall back
+        // to the scraped listing values so a breadcrumb-less page keeps the
+        // sub-category the listing already had instead of being mislabeled.
+        category: translation.category || article.category,
+        subcategory: translation.subcategory || article.subcategory,
         // Carry the validation result through so /api/save persists it and flags
         // the catalog entry (publish-all-and-flag; never blocks the save).
         validation: translation.validation,
