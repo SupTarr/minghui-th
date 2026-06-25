@@ -451,7 +451,9 @@ export interface CatalogEntry {
   title_en: string;
   title_th: string;
   date: string;
+  // category = top-level Minghui section; subcategory = leaf (breadcrumb-derived).
   category?: string;
+  subcategory?: string;
   filePath: string;
   // Content-validation summary (full per-rule detail lives in the article JSON).
   // Kept on the entry so the archive list / "Needs review" tab can filter

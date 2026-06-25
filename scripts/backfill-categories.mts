@@ -1,13 +1,17 @@
-// One-time backfill: fix the article sub-category in the Google Drive archive.
+// One-time backfill: fix the article category hierarchy in the Google Drive
+// archive.
 //
-// Historical data was written with a hardcoded category of "Cultivation
-// Insights" (see the old app/api/save/route.ts), so every archived article —
-// regardless of its real category — carries that same wrong label, and the
-// per-day index.json entries carry no category at all.
+// The data model now splits the Minghui breadcrumb (Home > <Parent> > <Sub>)
+// into two fields: `category` = the top-level section (e.g. "Cultivation") and
+// `subcategory` = the leaf (e.g. "Cultivation Insights"). Historical data
+// predates this: its single `category` field holds the leaf (and was often the
+// hardcoded "Cultivation Insights" regardless of the real one), with no
+// subcategory at all.
 //
-// This script walks every date folder in the archive, re-derives each article's
-// true sub-category from its Minghui breadcrumb (Home > Cultivation > <sub>),
-// and rewrites both the per-article JSON and the per-day index entry.
+// This script walks every date folder, re-derives BOTH levels from each
+// article's live breadcrumb (via the same parseBreadcrumb the app uses), and
+// rewrites the per-article JSON and the per-day index entry to the parent/sub
+// split.
 //
 // Usage:
 //   node --env-file=.env scripts/backfill-categories.mjs            # dry-run (no writes)
@@ -18,6 +22,11 @@
 // stored, and it never deletes anything.
 
 import { google, type drive_v3 } from "googleapis";
+import {
+  parseBreadcrumb,
+  CATEGORY_SEPARATOR,
+  type ArticleCategory,
+} from "../lib/parseArticle.ts";
 
 const APPLY = process.argv.includes("--apply");
 // Recreate a missing per-day index.json from the article JSON files in that
@@ -50,6 +59,7 @@ interface ArticleFile {
   content_en?: string;
   content_th?: string;
   category?: string;
+  subcategory?: string;
   published_date?: string;
   [k: string]: unknown;
 }
@@ -167,24 +177,27 @@ async function createJson(parentId: string, name: string, obj: unknown) {
 // ---------------------------------------------------------------------------
 // Category resolution from the Minghui article breadcrumb
 // ---------------------------------------------------------------------------
-const categoryCache = new Map(); // url -> category string | null
+// url -> { category, subcategory } parsed from the breadcrumb, or null when the
+// breadcrumb couldn't be read (HTTP error / no breadcrumb) — null means "leave
+// the stored values as-is", distinct from a resolved category with no sub.
+const categoryCache = new Map<string, ArticleCategory | null>();
 const urlStatus = new Map(); // url -> "ok" | "404" | "http:NNN" | "error" (for --verify dead-link check)
 
-async function fetchCategory(url: string) {
-  if (categoryCache.has(url)) return categoryCache.get(url);
-  let category = null;
+// "Parent › Sub" / "Parent" / "—" — human-readable category for diffs and audits.
+const fmtCatPath = (c?: string, s?: string): string =>
+  c ? (s ? `${c}${CATEGORY_SEPARATOR}${s}` : c) : "—";
+
+async function fetchCategories(url: string): Promise<ArticleCategory | null> {
+  if (categoryCache.has(url)) return categoryCache.get(url) ?? null;
+  let result: ArticleCategory | null = null;
   try {
     const res = await fetch(url, { headers: { "User-Agent": UA } });
     if (res.ok) {
       urlStatus.set(url, "ok");
-      const html = await res.text();
-      const bc = html.match(/<div class="bread-crumb">([\s\S]*?)<\/div>/);
-      if (bc) {
-        const links = [
-          ...bc[1].matchAll(/<a href="\/cc\/\d+\/?">([^<]+)<\/a>/g),
-        ];
-        if (links.length) category = links[links.length - 1][1].trim();
-      }
+      // Same parser the live pipeline uses, so the backfill and the app derive
+      // the parent/sub split identically (incl. HTML-entity decoding).
+      const parsed = parseBreadcrumb(await res.text());
+      if (parsed.category) result = parsed;
     } else {
       urlStatus.set(url, res.status === 404 ? "404" : `http:${res.status}`);
       console.warn(`  ! HTTP ${res.status} for ${url}`);
@@ -193,8 +206,8 @@ async function fetchCategory(url: string) {
     urlStatus.set(url, "error");
     console.warn(`  ! fetch failed for ${url}: ${(e as Error).message}`);
   }
-  categoryCache.set(url, category);
-  return category;
+  categoryCache.set(url, result);
+  return result;
 }
 
 // Resolve categories for many urls with a small concurrency pool.
@@ -203,7 +216,7 @@ async function resolveCategories(urls: string[]) {
   const workers = Array.from({ length: FETCH_CONCURRENCY }, async () => {
     while (queue.length) {
       const url = queue.shift();
-      await fetchCategory(url as string);
+      await fetchCategories(url as string);
     }
   });
   await Promise.all(workers);
@@ -237,7 +250,11 @@ async function rebuildIndex(
         title_en: art.title_en ?? "",
         title_th: art.title_th ?? "",
         date: art.published_date || date,
+        // Mirror the article file's already-split fields. Run the standard
+        // --apply migration first so these hold the parent/sub split rather than
+        // an un-migrated leaf.
         category: art.category || "Cultivation",
+        ...(art.subcategory ? { subcategory: art.subcategory } : {}),
         filePath: `/${date}/${name}`,
       });
     } catch (e) {
@@ -506,31 +523,37 @@ async function main() {
           );
         }
 
-        // Category three-way.
+        // Category three-way (parent + sub): index vs file vs breadcrumb truth.
+        // A record is "missing" when either side stores no top-level category at
+        // all, and "mismatch" when both are present but the parent/sub pair
+        // disagrees with the live breadcrumb.
         const truth = categoryCache.get(entry.url);
-        const idxCat = entry.category ?? "—";
-        const artCat = art.category ?? "—";
-        if (!truth) {
+        const idxPath = fmtCatPath(entry.category, entry.subcategory);
+        const artPath = fmtCatPath(art.category, art.subcategory);
+        if (!truth || !truth.category) {
           au.catUnresolved++;
           issues.push("catUnresolved");
           log(id, "CATEGORY-UNRESOLVED", "breadcrumb unreadable");
-        } else if (idxCat !== truth || artCat !== truth) {
-          if (idxCat === "—" || artCat === "—") {
-            au.catMissing++;
-            issues.push("catMissing");
-            log(
-              id,
-              "CATEGORY-MISSING",
-              `index="${idxCat}" file="${artCat}" truth="${truth}"`,
-            );
-          } else {
-            au.catMismatch++;
-            issues.push("catMismatch");
-            log(
-              id,
-              "CATEGORY-MISMATCH",
-              `index="${idxCat}" file="${artCat}" truth="${truth}"`,
-            );
+        } else {
+          const truthPath = fmtCatPath(truth.category, truth.subcategory);
+          if (idxPath !== truthPath || artPath !== truthPath) {
+            if (idxPath === "—" || artPath === "—") {
+              au.catMissing++;
+              issues.push("catMissing");
+              log(
+                id,
+                "CATEGORY-MISSING",
+                `index="${idxPath}" file="${artPath}" truth="${truthPath}"`,
+              );
+            } else {
+              au.catMismatch++;
+              issues.push("catMismatch");
+              log(
+                id,
+                "CATEGORY-MISMATCH",
+                `index="${idxPath}" file="${artPath}" truth="${truthPath}"`,
+              );
+            }
           }
         }
 
@@ -571,30 +594,49 @@ async function main() {
     for (const entry of entries) {
       if (!entry?.url) continue;
       const truth = categoryCache.get(entry.url);
-      if (!truth) {
+      if (!truth || !truth.category) {
         totalUnresolved++;
         continue; // couldn't determine — leave as-is
       }
-      if (entry.category === truth) continue; // already correct
+      const parent = truth.category;
+      const sub = truth.subcategory;
+      // Already correct only when BOTH levels match. Checking just the parent
+      // would skip records that still lack a subcategory and never converge;
+      // normalising undefined→"" makes "no sub" compare equal across re-runs.
+      if (
+        entry.category === parent &&
+        (entry.subcategory ?? "") === (sub ?? "")
+      )
+        continue;
 
       console.log(
         `${date}: ${entry.url.split("/").pop()}  ` +
-          `"${entry.category ?? "—"}" -> "${truth}"`,
+          `"${fmtCatPath(entry.category, entry.subcategory)}" -> ` +
+          `"${fmtCatPath(parent, sub)}"`,
       );
-      entry.category = truth;
+      entry.category = parent;
+      if (sub) entry.subcategory = sub;
+      else delete entry.subcategory;
       dayChanged++;
       totalChanged++;
 
       // Also fix the per-article JSON (the reader reads category from here),
-      // but only when its stored value is actually wrong.
+      // but only when its stored values are actually wrong.
       const fileName = (entry.filePath || "").split("/").pop();
       const articleId = fileName && byName.get(fileName);
       if (articleId) {
         if (APPLY) {
           try {
             const art = (await downloadJson(articleId)) as ArticleFile;
-            if (art && typeof art === "object" && art.category !== truth) {
-              art.category = truth;
+            if (
+              art &&
+              typeof art === "object" &&
+              (art.category !== parent ||
+                (art.subcategory ?? "") !== (sub ?? ""))
+            ) {
+              art.category = parent;
+              if (sub) art.subcategory = sub;
+              else delete art.subcategory;
               await updateJson(articleId, art);
               totalArticleFiles++;
             }
@@ -633,7 +675,10 @@ async function main() {
             title_en: art.title_en ?? "",
             title_th: art.title_th ?? "",
             date: art.published_date || date,
+            // Mirror the article file's split fields (run --apply first so they
+            // hold the parent/sub split, not an un-migrated leaf).
             category: art.category || "Cultivation",
+            ...(art.subcategory ? { subcategory: art.subcategory } : {}),
             filePath: `/${date}/${name}`,
           });
           dayChanged++;

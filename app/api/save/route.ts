@@ -28,10 +28,17 @@ export async function POST(req: Request) {
       content_th,
       date,
       category,
+      subcategory,
       validation,
     } = article;
-    // Fall back to the parent category when the list row had no sub-category.
+    // category is the top-level section; subcategory is the leaf. Both arrive
+    // already coalesced (breadcrumb ?? scraped) from the caller; "Cultivation"
+    // is the last-resort default when even the breadcrumb couldn't be read.
     const articleCategory = category || "Cultivation";
+    const articleSubcategory =
+      typeof subcategory === "string" && subcategory.length > 0
+        ? subcategory
+        : undefined;
 
     // Require each field to be a non-empty string so a malformed body fails with
     // a 400 here (and url.match below never throws a TypeError on a non-string).
@@ -66,6 +73,7 @@ export async function POST(req: Request) {
       content_en,
       content_th,
       category: articleCategory,
+      ...(articleSubcategory ? { subcategory: articleSubcategory } : {}),
       published_date: date,
       fetched_at: new Date().toISOString(),
       // Full validation detail (optional — absent on manual saves that skip it).
@@ -84,6 +92,7 @@ export async function POST(req: Request) {
       title_th,
       date,
       category: articleCategory,
+      ...(articleSubcategory ? { subcategory: articleSubcategory } : {}),
       filePath: `/${folderName}/${fileName}`,
       // Mirror the validation status onto the catalog entry so the archive list
       // and "Needs review" tab can filter without loading each article file.

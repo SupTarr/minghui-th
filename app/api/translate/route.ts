@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { authorize } from "@/lib/auth";
-import { parseArticleHtml, sourceBodyTextLength } from "@/lib/parseArticle";
+import {
+  parseArticleHtml,
+  parseBreadcrumb,
+  sourceBodyTextLength,
+} from "@/lib/parseArticle";
 import { validateArticle } from "@/lib/contentValidation";
 
 export async function POST(req: Request) {
@@ -42,6 +46,10 @@ export async function POST(req: Request) {
 
     // 2. Extract English title & content paragraphs
     const { title_en, content_en } = parseArticleHtml(html);
+    // The article's own breadcrumb is the authoritative source for its category
+    // hierarchy (it covers manual imports from any section, not just the scraped
+    // /cc/24/ listing). Both fields may be undefined on a breadcrumb-less page.
+    const { category, subcategory } = parseBreadcrumb(html);
     if (!title_en) {
       throw new Error("Could not find article title on the page.");
     }
@@ -130,6 +138,8 @@ Article content: ${content_en}`;
       content_en,
       title_th,
       content_th,
+      category,
+      subcategory,
       validation,
     });
   } catch (error) {

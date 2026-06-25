@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseArticleHtml } from "./parseArticle";
+import { parseArticleHtml, parseBreadcrumb } from "./parseArticle";
 
 // Fixture mirroring the real Minghui article DOM, including every `splitted`
 // variant the parser must distinguish: metadata, image caption, poem quote, and
@@ -267,5 +267,80 @@ describe("parseArticleHtml — quote merging and dividers", () => {
     );
     expect(content_en).toContain("\n\n---\n\n");
     expect(content_en).not.toContain("* * * * * * *");
+  });
+});
+
+describe("parseBreadcrumb", () => {
+  const bc = (inner: string) =>
+    `<html><body><div class="bread-crumb">${inner}</div></body></html>`;
+
+  it("splits Home > Parent > Sub into category + subcategory", () => {
+    const html = bc(
+      `<a href="/">Home</a> &gt; <a href="/cc/24/">Cultivation</a> &gt; ` +
+        `<a href="/cc/26/">Cultivation Insights</a>`,
+    );
+    expect(parseBreadcrumb(html)).toEqual({
+      category: "Cultivation",
+      subcategory: "Cultivation Insights",
+    });
+  });
+
+  it("reads a non-Cultivation top-level section (e.g. About Dafa)", () => {
+    const html = bc(
+      `<a href="/">Home</a> &gt; <a href="/cc/15/">About Dafa</a> &gt; ` +
+        `<a href="/cc/16/">Introduction to Falun Dafa</a>`,
+    );
+    expect(parseBreadcrumb(html)).toEqual({
+      category: "About Dafa",
+      subcategory: "Introduction to Falun Dafa",
+    });
+  });
+
+  it("keeps the full sub-path for a 3+-level breadcrumb (News & Events case)", () => {
+    const html = bc(
+      `<a href="/">Home</a> &gt; <a href="/cc/33/">News &amp; Events</a> &gt; ` +
+        `<a href="/cc/36/">World Falun Dafa Day</a> &gt; ` +
+        `<a href="/cc/82/">Dafa Day Perspectives</a>`,
+    );
+    expect(parseBreadcrumb(html)).toEqual({
+      category: "News & Events",
+      subcategory: "World Falun Dafa Day › Dafa Day Perspectives",
+    });
+  });
+
+  it("returns only the parent when the breadcrumb has a single section link", () => {
+    const html = bc(
+      `<a href="/">Home</a> &gt; <a href="/cc/24/">Cultivation</a>`,
+    );
+    expect(parseBreadcrumb(html)).toEqual({
+      category: "Cultivation",
+      subcategory: undefined,
+    });
+  });
+
+  it("returns {} when there is no breadcrumb div", () => {
+    expect(
+      parseBreadcrumb("<html><body><p>No crumbs here.</p></body></html>"),
+    ).toEqual({});
+  });
+
+  it("returns {} when the breadcrumb has no /cc/ section links (Home only)", () => {
+    expect(parseBreadcrumb(bc(`<a href="/">Home</a>`))).toEqual({});
+  });
+
+  it("decodes HTML entities and collapses whitespace in section names", () => {
+    const html = bc(
+      `<a href="/">Home</a> &gt; <a href="/cc/99/">Health &amp;\n  Healing</a> &gt; ` +
+        `<a href="/cc/100/">Recovery</a>`,
+    );
+    expect(parseBreadcrumb(html)).toEqual({
+      category: "Health & Healing",
+      subcategory: "Recovery",
+    });
+  });
+
+  it("never throws on empty or malformed input", () => {
+    expect(() => parseBreadcrumb("")).not.toThrow();
+    expect(parseBreadcrumb("")).toEqual({});
   });
 });

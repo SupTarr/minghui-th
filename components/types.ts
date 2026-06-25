@@ -10,7 +10,10 @@ export interface Article {
   title_en: string;
   title_th: string;
   date: string;
+  // Top-level Minghui section (e.g. "Cultivation"); subcategory is the leaf
+  // (e.g. "Cultivation Insights"). Both are derived from the article breadcrumb.
   category?: string;
+  subcategory?: string;
   filePath?: string;
   // Set by the content validator. Lives on the lightweight catalog entry so the
   // "Needs review" tab can filter from the per-day index without loading each
@@ -22,6 +25,7 @@ export interface Article {
 export interface ArticleDetails {
   published_date: string;
   category: string;
+  subcategory?: string;
   url: string;
   title_th: string;
   title_en: string;

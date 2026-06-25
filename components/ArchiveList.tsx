@@ -201,8 +201,13 @@ export default function ArchiveList({
                         {article.date}
                       </span>
                       {article.category && (
-                        <span className="text-3xs font-sans px-2 py-0.5 rounded bg-teal-500/10 text-teal-400/90 border border-teal-500/15 truncate">
+                        <span className="text-3xs font-sans px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400/90 border border-indigo-500/15 truncate">
                           {article.category}
+                        </span>
+                      )}
+                      {article.subcategory && (
+                        <span className="text-3xs font-sans px-2 py-0.5 rounded bg-teal-500/10 text-teal-400/90 border border-teal-500/15 truncate">
+                          {article.subcategory}
                         </span>
                       )}
                       {article.status === "FAILED" && (

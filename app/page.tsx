@@ -612,7 +612,10 @@ export default function Dashboard() {
             content_en: transData.content_en,
             content_th: transData.content_th,
             date: article.date,
-            category: article.category,
+            // Prefer the breadcrumb hierarchy /api/translate derived from the
+            // page; fall back to the scraped listing values when it's empty.
+            category: transData.category || article.category,
+            subcategory: transData.subcategory || article.subcategory,
             // Persist the validator's result and flag the catalog entry.
             validation: transData.validation,
           }),
@@ -641,6 +644,7 @@ export default function Dashboard() {
           title_th: transData.title_th,
           date: article.date,
           category: saveData.entry?.category ?? article.category,
+          subcategory: saveData.entry?.subcategory ?? article.subcategory,
           filePath: saveData.filePath,
           // Carry the validation flag so it rides into the per-day index and the
           // session's in-memory lists (powering the "Needs review" tab).
@@ -812,9 +816,11 @@ export default function Dashboard() {
           content_en: transData.content_en,
           content_th: transData.content_th,
           date,
-          // A manual import has no scraped sub-category; /api/save also defaults
-          // this to "Cultivation", but we send it explicitly to be unambiguous.
-          category: "Cultivation",
+          // A manual import can be from any Minghui section, so trust the
+          // breadcrumb hierarchy /api/translate read off the page. If the page
+          // had no breadcrumb, /api/save falls back to "Cultivation".
+          category: transData.category,
+          subcategory: transData.subcategory,
           validation: transData.validation,
         }),
       });
@@ -840,6 +846,7 @@ export default function Dashboard() {
         title_th: transData.title_th,
         date,
         category: saveData.entry?.category ?? "Cultivation",
+        subcategory: saveData.entry?.subcategory ?? transData.subcategory,
         filePath: saveData.filePath,
         status: saveData.entry?.status,
         statusDesc: saveData.entry?.statusDesc,
