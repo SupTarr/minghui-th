@@ -101,6 +101,9 @@ async function processArticle(
         // Forward the scraped sub-category; without it /api/save falls back to
         // "Cultivation" and every auto-synced article is mislabeled.
         category: article.category,
+        // Carry the validation result through so /api/save persists it and flags
+        // the catalog entry (publish-all-and-flag; never blocks the save).
+        validation: translation.validation,
       }),
     });
     const saveRes = await savePOST(saveReq);

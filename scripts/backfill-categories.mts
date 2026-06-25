@@ -17,7 +17,7 @@
 // Safe to re-run: it only writes when the derived category differs from what's
 // stored, and it never deletes anything.
 
-import { google } from "googleapis";
+import { google, type drive_v3 } from "googleapis";
 
 const APPLY = process.argv.includes("--apply");
 // Recreate a missing per-day index.json from the article JSON files in that
@@ -31,7 +31,7 @@ const VERIFY = process.argv.includes("--verify");
 // index.json back into the index (so they appear in the app and aren't
 // re-translated on the next sync). Requires --apply to actually write.
 const ADOPT = process.argv.includes("--adopt-orphans");
-const argVal = (name) => {
+const argVal = (name: string) => {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
   return hit ? hit.slice(name.length + 3) : null;
 };
@@ -43,10 +43,21 @@ const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
+interface ArticleFile {
+  url?: string;
+  title_en?: string;
+  title_th?: string;
+  content_en?: string;
+  content_th?: string;
+  category?: string;
+  published_date?: string;
+  [k: string]: unknown;
+}
+
 // ---------------------------------------------------------------------------
 // Google Drive client (mirrors lib/gdrive.ts: OAuth2 first, Service Account next)
 // ---------------------------------------------------------------------------
-function initDrive() {
+function initDrive(): drive_v3.Drive {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
@@ -75,8 +86,11 @@ function initDrive() {
 const drive = initDrive();
 const DRIVE_ID = process.env.GOOGLE_DRIVE_ID || null;
 
-function listParams(q, fields) {
-  const p = {
+function listParams(
+  q: string,
+  fields: string,
+): drive_v3.Params$Resource$Files$List {
+  const p: drive_v3.Params$Resource$Files$List = {
     q,
     fields,
     supportsAllDrives: true,
@@ -90,20 +104,23 @@ function listParams(q, fields) {
   return p;
 }
 
-async function listAll(q, fields) {
-  const out = [];
-  let pageToken;
+async function listAll(
+  q: string,
+  fields: string,
+): Promise<drive_v3.Schema$File[]> {
+  const out: drive_v3.Schema$File[] = [];
+  let pageToken: string | undefined;
   do {
     const params = listParams(q, `nextPageToken, ${fields}`);
     if (pageToken) params.pageToken = pageToken;
     const res = await drive.files.list(params);
     out.push(...(res.data.files || []));
-    pageToken = res.data.nextPageToken;
+    pageToken = res.data.nextPageToken ?? undefined;
   } while (pageToken);
   return out;
 }
 
-async function resolveRootId() {
+async function resolveRootId(): Promise<string> {
   const raw = process.env.GOOGLE_DRIVE_FOLDER_ID;
   if (!raw) throw new Error("GOOGLE_DRIVE_FOLDER_ID is not set.");
   if (!raw.includes("/")) return raw;
@@ -114,13 +131,14 @@ async function resolveRootId() {
       `mimeType = 'application/vnd.google-apps.folder' and name = '${part}' and '${parent}' in parents and trashed = false`,
       "files(id)",
     );
-    if (!files.length) throw new Error(`Folder path segment not found: ${part}`);
-    parent = files[0].id;
+    if (!files.length)
+      throw new Error(`Folder path segment not found: ${part}`);
+    parent = files[0].id as string;
   }
   return parent;
 }
 
-async function downloadJson(fileId) {
+async function downloadJson(fileId: string): Promise<unknown> {
   const res = await drive.files.get(
     { fileId, alt: "media", supportsAllDrives: true },
     { responseType: "text" },
@@ -128,7 +146,7 @@ async function downloadJson(fileId) {
   return typeof res.data === "string" ? JSON.parse(res.data) : res.data;
 }
 
-async function updateJson(fileId, obj) {
+async function updateJson(fileId: string, obj: unknown) {
   await drive.files.update({
     fileId,
     supportsAllDrives: true,
@@ -137,7 +155,7 @@ async function updateJson(fileId, obj) {
   });
 }
 
-async function createJson(parentId, name, obj) {
+async function createJson(parentId: string, name: string, obj: unknown) {
   await drive.files.create({
     supportsAllDrives: true,
     requestBody: { name, parents: [parentId], mimeType: "application/json" },
@@ -152,7 +170,7 @@ async function createJson(parentId, name, obj) {
 const categoryCache = new Map(); // url -> category string | null
 const urlStatus = new Map(); // url -> "ok" | "404" | "http:NNN" | "error" (for --verify dead-link check)
 
-async function fetchCategory(url) {
+async function fetchCategory(url: string) {
   if (categoryCache.has(url)) return categoryCache.get(url);
   let category = null;
   try {
@@ -162,7 +180,9 @@ async function fetchCategory(url) {
       const html = await res.text();
       const bc = html.match(/<div class="bread-crumb">([\s\S]*?)<\/div>/);
       if (bc) {
-        const links = [...bc[1].matchAll(/<a href="\/cc\/\d+\/?">([^<]+)<\/a>/g)];
+        const links = [
+          ...bc[1].matchAll(/<a href="\/cc\/\d+\/?">([^<]+)<\/a>/g),
+        ];
         if (links.length) category = links[links.length - 1][1].trim();
       }
     } else {
@@ -171,22 +191,22 @@ async function fetchCategory(url) {
     }
   } catch (e) {
     urlStatus.set(url, "error");
-    console.warn(`  ! fetch failed for ${url}: ${e.message}`);
+    console.warn(`  ! fetch failed for ${url}: ${(e as Error).message}`);
   }
   categoryCache.set(url, category);
   return category;
 }
 
 // True when the string contains at least one Thai-script character.
-const hasThai = (s) => /[฀-๿]/.test(s || "");
+const hasThai = (s: string) => /[฀-๿]/.test(s || "");
 
 // Resolve categories for many urls with a small concurrency pool.
-async function resolveCategories(urls) {
+async function resolveCategories(urls: string[]) {
   const queue = [...urls];
   const workers = Array.from({ length: FETCH_CONCURRENCY }, async () => {
     while (queue.length) {
       const url = queue.shift();
-      await fetchCategory(url);
+      await fetchCategory(url as string);
     }
   });
   await Promise.all(workers);
@@ -194,7 +214,11 @@ async function resolveCategories(urls) {
 
 // Rebuild a missing index.json for a date folder from its article JSON files.
 // Returns the number of entries that were (or would be) written.
-async function rebuildIndex(date, folderId, byName) {
+async function rebuildIndex(
+  date: string,
+  folderId: string,
+  byName: Map<string, string>,
+) {
   const articleFiles = [...byName.entries()].filter(([name]) =>
     /^\d+\.json$/.test(name),
   );
@@ -206,7 +230,7 @@ async function rebuildIndex(date, folderId, byName) {
   const entries = [];
   for (const [name, id] of articleFiles) {
     try {
-      const art = await downloadJson(id);
+      const art = (await downloadJson(id)) as ArticleFile;
       if (!art || typeof art !== "object" || !art.url) {
         console.warn(`  ! ${date}/${name}: missing url — skipped`);
         continue;
@@ -220,7 +244,7 @@ async function rebuildIndex(date, folderId, byName) {
         filePath: `/${date}/${name}`,
       });
     } catch (e) {
-      console.warn(`  ! ${date}/${name}: ${e.message}`);
+      console.warn(`  ! ${date}/${name}: ${(e as Error).message}`);
     }
   }
 
@@ -228,14 +252,16 @@ async function rebuildIndex(date, folderId, byName) {
     `${date}: rebuild index from ${entries.length} article file(s)` +
       `${APPLY ? "" : " (dry-run)"}`,
   );
-  if (APPLY && entries.length) await createJson(folderId, "index.json", entries);
+  if (APPLY && entries.length)
+    await createJson(folderId, "index.json", entries);
   return entries.length;
 }
 
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
-const inRange = (date) => (!FROM || date >= FROM) && (!TO || date <= TO);
+const inRange = (date: string) =>
+  (!FROM || date >= FROM) && (!TO || date <= TO);
 
 async function main() {
   const mode = VERIFY
@@ -256,8 +282,11 @@ async function main() {
     "files(id, name)",
   );
   const dateFolders = folders
-    .filter((f) => /^\d{4}-\d{2}-\d{2}$/.test(f.name) && inRange(f.name))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter(
+      (f) =>
+        /^\d{4}-\d{2}-\d{2}$/.test(f.name ?? "") && inRange(f.name as string),
+    )
+    .sort((a, b) => (a.name as string).localeCompare(b.name as string));
 
   console.log(`Found ${dateFolders.length} date folder(s) to scan.\n`);
 
@@ -296,23 +325,27 @@ async function main() {
   const globalUrls = new Map();
 
   for (const folder of dateFolders) {
-    const date = folder.name;
+    const date = folder.name as string;
     const files = await listAll(
       `'${folder.id}' in parents and trashed = false`,
       "files(id, name)",
     );
-    const byName = new Map(files.map((f) => [f.name, f.id]));
+    const byName = new Map(
+      files.map((f) => [f.name as string, f.id as string]),
+    );
 
     const indexId = byName.get("index.json");
     if (!indexId) {
       if (VERIFY) {
-        const n = [...byName.keys()].filter((x) => /^\d+\.json$/.test(x)).length;
+        const n = [...byName.keys()].filter((x) =>
+          /^\d+\.json$/.test(x),
+        ).length;
         au.noIndex++;
         console.log(
           `${date}: NO-INDEX — ${n} article file(s) present but no index.json`,
         );
       } else if (REBUILD) {
-        const n = await rebuildIndex(date, folder.id, byName);
+        const n = await rebuildIndex(date, folder.id as string, byName);
         if (n) {
           totalIndexesRebuilt++;
           totalRebuiltEntries += n;
@@ -325,15 +358,19 @@ async function main() {
       continue;
     }
 
-    let entries;
+    let entries: unknown;
     try {
       entries = await downloadJson(indexId);
     } catch (e) {
       if (VERIFY) {
         au.badJson++;
-        console.log(`${date}: BAD-JSON index.json is not parseable (${e.message})`);
+        console.log(
+          `${date}: BAD-JSON index.json is not parseable (${(e as Error).message})`,
+        );
       } else {
-        console.warn(`${date}: failed to read index.json (${e.message}) — skipping`);
+        console.warn(
+          `${date}: failed to read index.json (${(e as Error).message}) — skipping`,
+        );
       }
       continue;
     }
@@ -364,7 +401,8 @@ async function main() {
         /^\d+\.json$/.test(n),
       );
       const REQUIRED = ["url", "title_en", "title_th", "date", "filePath"];
-      const log = (id, tag, msg) => console.log(`${date}: ${id}  ${tag} ${msg}`);
+      const log = (id: string, tag: string, msg: string) =>
+        console.log(`${date}: ${id}  ${tag} ${msg}`);
 
       for (const entry of entries) {
         const id = (entry?.url || entry?.filePath || "?").split("/").pop();
@@ -412,17 +450,25 @@ async function main() {
         if (!articleId) {
           au.fileMissing++;
           issues.push("fileMissing");
-          log(id, "FILE-MISSING", `index points to "${entry.filePath}" (absent)`);
+          log(
+            id,
+            "FILE-MISSING",
+            `index points to "${entry.filePath}" (absent)`,
+          );
           continue;
         }
 
-        let art;
+        let art: ArticleFile;
         try {
-          art = await downloadJson(articleId);
+          art = (await downloadJson(articleId)) as ArticleFile;
         } catch (e) {
           au.badJson++;
           issues.push("badJson");
-          log(id, "BAD-JSON", `article file unparseable (${e.message})`);
+          log(
+            id,
+            "BAD-JSON",
+            `article file unparseable (${(e as Error).message})`,
+          );
           continue;
         }
         if (!art || typeof art !== "object") {
@@ -433,9 +479,14 @@ async function main() {
         }
 
         // Field drift: index entry must agree with the article file.
-        const drift = [];
-        const cmp = (field, a, b) => {
-          if ((a ?? "") !== (b ?? "")) drift.push(`${field}(index="${a ?? "—"}" file="${b ?? "—"}")`);
+        const drift: string[] = [];
+        const cmp = (
+          field: string,
+          a: string | undefined,
+          b: string | undefined,
+        ) => {
+          if ((a ?? "") !== (b ?? ""))
+            drift.push(`${field}(index="${a ?? "—"}" file="${b ?? "—"}")`);
         };
         cmp("url", entry.url, art.url);
         cmp("title_en", entry.title_en, art.title_en);
@@ -448,10 +499,17 @@ async function main() {
         }
 
         // Date misfiling: folder name == entry.date == published_date.
-        if (entry.date !== date || (art.published_date && art.published_date !== date)) {
+        if (
+          entry.date !== date ||
+          (art.published_date && art.published_date !== date)
+        ) {
           au.dateMisfiled++;
           issues.push("dateMisfiled");
-          log(id, "DATE-MISFILED", `folder=${date} entry.date=${entry.date} published_date=${art.published_date ?? "—"}`);
+          log(
+            id,
+            "DATE-MISFILED",
+            `folder=${date} entry.date=${entry.date} published_date=${art.published_date ?? "—"}`,
+          );
         }
 
         // Category three-way.
@@ -466,11 +524,19 @@ async function main() {
           if (idxCat === "—" || artCat === "—") {
             au.catMissing++;
             issues.push("catMissing");
-            log(id, "CATEGORY-MISSING", `index="${idxCat}" file="${artCat}" truth="${truth}"`);
+            log(
+              id,
+              "CATEGORY-MISSING",
+              `index="${idxCat}" file="${artCat}" truth="${truth}"`,
+            );
           } else {
             au.catMismatch++;
             issues.push("catMismatch");
-            log(id, "CATEGORY-MISMATCH", `index="${idxCat}" file="${artCat}" truth="${truth}"`);
+            log(
+              id,
+              "CATEGORY-MISMATCH",
+              `index="${idxCat}" file="${artCat}" truth="${truth}"`,
+            );
           }
         }
 
@@ -481,18 +547,30 @@ async function main() {
         if (!tTh || !cTh) {
           au.transEmpty++;
           issues.push("transEmpty");
-          log(id, "TRANS-EMPTY", `title_th=${tTh ? "ok" : "EMPTY"} content_th=${cTh ? "ok" : "EMPTY"}`);
+          log(
+            id,
+            "TRANS-EMPTY",
+            `title_th=${tTh ? "ok" : "EMPTY"} content_th=${cTh ? "ok" : "EMPTY"}`,
+          );
         } else {
           if (!hasThai(tTh) || !hasThai(cTh)) {
             au.transEnglish++;
             issues.push("transEnglish");
-            log(id, "TRANS-ENGLISH", "Thai field has no Thai characters (untranslated?)");
+            log(
+              id,
+              "TRANS-ENGLISH",
+              "Thai field has no Thai characters (untranslated?)",
+            );
           }
           // Suspiciously short Thai content relative to the English source.
           if (cEn && cTh.length < cEn.length * 0.15) {
             au.transShort++;
             issues.push("transShort");
-            log(id, "TRANS-SHORT", `content_th ${cTh.length} chars vs content_en ${cEn.length} (truncated?)`);
+            log(
+              id,
+              "TRANS-SHORT",
+              `content_th ${cTh.length} chars vs content_en ${cEn.length} (truncated?)`,
+            );
           }
         }
 
@@ -511,7 +589,9 @@ async function main() {
       for (const name of articleFileNames) {
         if (!referenced.has(name)) {
           au.orphan++;
-          console.log(`${date}: ${name}  ORPHAN — article file not listed in index.json`);
+          console.log(
+            `${date}: ${name}  ORPHAN — article file not listed in index.json`,
+          );
         }
       }
 
@@ -519,7 +599,9 @@ async function main() {
       for (const name of byName.keys()) {
         if (name !== "index.json" && !/^\d+\.json$/.test(name)) {
           au.stray++;
-          console.log(`${date}: ${name}  STRAY — unexpected file in date folder`);
+          console.log(
+            `${date}: ${name}  STRAY — unexpected file in date folder`,
+          );
         }
       }
       continue; // verify never mutates
@@ -550,14 +632,16 @@ async function main() {
       if (articleId) {
         if (APPLY) {
           try {
-            const art = await downloadJson(articleId);
+            const art = (await downloadJson(articleId)) as ArticleFile;
             if (art && typeof art === "object" && art.category !== truth) {
               art.category = truth;
               await updateJson(articleId, art);
               totalArticleFiles++;
             }
           } catch (e) {
-            console.warn(`  ! failed updating ${fileName}: ${e.message}`);
+            console.warn(
+              `  ! failed updating ${fileName}: ${(e as Error).message}`,
+            );
           }
         } else {
           totalArticleFiles++; // upper bound; dry-run doesn't read article files
@@ -570,18 +654,18 @@ async function main() {
     // Adopt orphan article files (present in the folder, missing from the index).
     if (ADOPT) {
       const referenced = new Set(
-        entries
-          .map((e) => (e.filePath || "").split("/").pop())
-          .filter(Boolean),
+        entries.map((e) => (e.filePath || "").split("/").pop()).filter(Boolean),
       );
       const orphans = [...byName.entries()].filter(
         ([name]) => /^\d+\.json$/.test(name) && !referenced.has(name),
       );
       for (const [name, id] of orphans) {
         try {
-          const art = await downloadJson(id);
+          const art = (await downloadJson(id)) as ArticleFile;
           if (!art || typeof art !== "object" || !art.url) {
-            console.warn(`  ! ${date}/${name}: not a valid article — not adopted`);
+            console.warn(
+              `  ! ${date}/${name}: not a valid article — not adopted`,
+            );
             continue;
           }
           entries.push({
@@ -594,9 +678,11 @@ async function main() {
           });
           dayChanged++;
           totalAdopted++;
-          console.log(`${date}: ${name}  ADOPTED into index${APPLY ? "" : " (dry-run)"}`);
+          console.log(
+            `${date}: ${name}  ADOPTED into index${APPLY ? "" : " (dry-run)"}`,
+          );
         } catch (e) {
-          console.warn(`  ! ${date}/${name}: ${e.message}`);
+          console.warn(`  ! ${date}/${name}: ${(e as Error).message}`);
         }
       }
     }

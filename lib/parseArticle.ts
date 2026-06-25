@@ -332,3 +332,20 @@ export function parseArticleHtml(html: string): ParsedArticle {
 
   return { title_en, content_en };
 }
+
+/**
+ * Plain-text length (whitespace-stripped) of a source article's body container,
+ * for the content validator's completeness heuristic. Mirrors the body selection
+ * in parseArticleHtml (.article-body-content, falling back to the jingwen
+ * container) and drops the copyright notice the parser also excludes. Returns 0
+ * when no recognized body container is present.
+ */
+export function sourceBodyTextLength(html: string): number {
+  const $ = cheerio.load(html);
+  let body = $(".article-body-content");
+  if (body.length === 0) body = $(".jingwenNei");
+  if (body.length === 0) return 0;
+  const clone = body.clone();
+  clone.find(".copyright-notice").remove();
+  return clone.text().replace(/\s+/g, "").length;
+}

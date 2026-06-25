@@ -9,10 +9,11 @@ interface ArchiveListProps {
   setStartDate: (date: string) => void;
   endDate: string;
   setEndDate: (date: string) => void;
-  activeTab: "archived" | "newly-synced";
-  setActiveTab: (tab: "archived" | "newly-synced") => void;
+  activeTab: "archived" | "newly-synced" | "needs-review";
+  setActiveTab: (tab: "archived" | "newly-synced" | "needs-review") => void;
   archivedArticles: Article[];
   newlySynced: Article[];
+  needsReview: Article[];
   listArticles: Article[];
   currentPage: number;
   setCurrentPage: (page: number) => void;
@@ -34,6 +35,7 @@ export default function ArchiveList({
   setActiveTab,
   archivedArticles,
   newlySynced,
+  needsReview,
   listArticles,
   currentPage,
   setCurrentPage,
@@ -99,6 +101,20 @@ export default function ArchiveList({
         >
           แปลรอบนี้ ({newlySynced.length})
         </button>
+        <button
+          type="button"
+          aria-pressed={activeTab === "needs-review"}
+          onClick={() => setActiveTab("needs-review")}
+          className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+            activeTab === "needs-review"
+              ? "bg-red-500/10 text-red-300 font-bold border border-red-500/20"
+              : needsReview.length > 0
+                ? "text-red-300/80 hover:text-red-200"
+                : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          ต้องตรวจสอบ ({needsReview.length})
+        </button>
       </div>
 
       {/* Scrollable list of articles */}
@@ -159,6 +175,12 @@ export default function ArchiveList({
               ยังไม่มีบทความที่ดึงใหม่ในเซสชันนี้
             </span>
           </div>
+        ) : activeTab === "needs-review" && needsReview.length === 0 ? (
+          <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
+            <span className="text-xs font-sans">
+              ไม่มีบทความที่ต้องตรวจสอบในช่วงนี้ — เนื้อหาผ่านการตรวจครบถ้วน
+            </span>
+          </div>
         ) : (
           <>
             {listArticles
@@ -183,6 +205,11 @@ export default function ArchiveList({
                           {article.category}
                         </span>
                       )}
+                      {article.status === "FAILED" && (
+                        <span className="text-3xs font-mono px-2 py-0.5 rounded bg-red-500/10 text-red-300 border border-red-500/20 shrink-0">
+                          ต้องตรวจ
+                        </span>
+                      )}
                     </div>
                     <svg
                       aria-hidden="true"
@@ -205,6 +232,11 @@ export default function ArchiveList({
                   <p className="text-3xs text-slate-500 font-sans line-clamp-1 mt-1.5 italic group-hover:text-slate-400 transition-colors">
                     {article.title_en}
                   </p>
+                  {article.status === "FAILED" && article.statusDesc && (
+                    <p className="text-3xs text-red-300/80 font-sans line-clamp-2 mt-2 leading-relaxed">
+                      ⚠ {article.statusDesc}
+                    </p>
+                  )}
                 </button>
               ))}
             {totalPages > 1 && (

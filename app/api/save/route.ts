@@ -20,8 +20,16 @@ export async function POST(req: Request) {
       );
     }
 
-    const { url, title_en, title_th, content_en, content_th, date, category } =
-      article;
+    const {
+      url,
+      title_en,
+      title_th,
+      content_en,
+      content_th,
+      date,
+      category,
+      validation,
+    } = article;
     // Fall back to the parent category when the list row had no sub-category.
     const articleCategory = category || "Cultivation";
 
@@ -60,6 +68,8 @@ export async function POST(req: Request) {
       category: articleCategory,
       published_date: date,
       fetched_at: new Date().toISOString(),
+      // Full validation detail (optional — absent on manual saves that skip it).
+      ...(validation && typeof validation === "object" ? { validation } : {}),
     };
 
     // 3. Write individual article JSON to Drive folder
@@ -75,6 +85,11 @@ export async function POST(req: Request) {
       date,
       category: articleCategory,
       filePath: `/${folderName}/${fileName}`,
+      // Mirror the validation status onto the catalog entry so the archive list
+      // and "Needs review" tab can filter without loading each article file.
+      ...(validation && typeof validation === "object"
+        ? { status: validation.status, statusDesc: validation.statusDesc }
+        : {}),
     };
 
     return NextResponse.json({

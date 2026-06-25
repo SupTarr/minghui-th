@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { authorize } from "@/lib/auth";
-import { parseArticleHtml } from "@/lib/parseArticle";
+import { parseArticleHtml, sourceBodyTextLength } from "@/lib/parseArticle";
+import { validateArticle } from "@/lib/contentValidation";
 
 export async function POST(req: Request) {
   try {
@@ -103,11 +104,27 @@ Article content: ${content_en}`;
       );
     }
 
+    // Deterministic completeness/correctness check before the article is saved.
+    // Never blocks (publish-all-and-flag): the result is attached and persisted,
+    // and FAILED items surface in the "Needs review" admin tab. `html` is still
+    // in scope here, so the source-body completeness heuristic can run too.
+    const validation = validateArticle(
+      {
+        title_en,
+        content_en,
+        title_th,
+        content_th,
+        sourceTextLength: sourceBodyTextLength(html),
+      },
+      new Date().toISOString(),
+    );
+
     return NextResponse.json({
       title_en,
       content_en,
       title_th,
       content_th,
+      validation,
     });
   } catch (error) {
     const err = error as Error;
