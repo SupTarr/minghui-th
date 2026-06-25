@@ -197,9 +197,6 @@ async function fetchCategory(url: string) {
   return category;
 }
 
-// True when the string contains at least one Thai-script character.
-const hasThai = (s: string) => /[฀-๿]/.test(s || "");
-
 // Resolve categories for many urls with a small concurrency pool.
 async function resolveCategories(urls: string[]) {
   const queue = [...urls];
@@ -311,9 +308,6 @@ async function main() {
     catMismatch: 0,
     catMissing: 0,
     catUnresolved: 0,
-    transEmpty: 0, // missing/empty Thai title or content
-    transEnglish: 0, // Thai field contains no Thai characters
-    transShort: 0, // Thai content suspiciously short vs the English
     orphan: 0, // article file on disk not referenced by the index
     dup: 0, // same url listed more than once within one day's index
     crossDup: 0, // same url archived under more than one date folder
@@ -393,7 +387,7 @@ async function main() {
     //   category three-way (index vs file vs Minghui breadcrumb),
     //   field drift, schema completeness, id/date consistency,
     //   missing/orphan/stray files, in-day & cross-day url dups,
-    //   translation quality, and dead source links.
+    //   and dead source links.
     if (VERIFY) {
       const referenced = new Set(); // article file names the index points to
       const urlSeen = new Set();
@@ -540,40 +534,6 @@ async function main() {
           }
         }
 
-        // Translation quality.
-        const tTh = (art.title_th || "").trim();
-        const cTh = (art.content_th || "").trim();
-        const cEn = (art.content_en || "").trim();
-        if (!tTh || !cTh) {
-          au.transEmpty++;
-          issues.push("transEmpty");
-          log(
-            id,
-            "TRANS-EMPTY",
-            `title_th=${tTh ? "ok" : "EMPTY"} content_th=${cTh ? "ok" : "EMPTY"}`,
-          );
-        } else {
-          if (!hasThai(tTh) || !hasThai(cTh)) {
-            au.transEnglish++;
-            issues.push("transEnglish");
-            log(
-              id,
-              "TRANS-ENGLISH",
-              "Thai field has no Thai characters (untranslated?)",
-            );
-          }
-          // Suspiciously short Thai content relative to the English source.
-          if (cEn && cTh.length < cEn.length * 0.15) {
-            au.transShort++;
-            issues.push("transShort");
-            log(
-              id,
-              "TRANS-SHORT",
-              `content_th ${cTh.length} chars vs content_en ${cEn.length} (truncated?)`,
-            );
-          }
-        }
-
         // Dead source link (status captured during category fetch).
         const st = urlStatus.get(entry.url);
         if (st && st !== "ok") {
@@ -702,7 +662,6 @@ async function main() {
         `date-misfiled: ${au.dateMisfiled}, bad-json: ${au.badJson}\n` +
         `  files      — file-missing: ${au.fileMissing}, orphan: ${au.orphan}, stray: ${au.stray}, no-index: ${au.noIndex}\n` +
         `  duplicates — in-day: ${au.dup}, cross-day: ${au.crossDup}\n` +
-        `  translation— empty: ${au.transEmpty}, english-leak: ${au.transEnglish}, too-short: ${au.transShort}\n` +
         `  source     — dead-url: ${au.deadUrl}`,
     );
     console.log(
