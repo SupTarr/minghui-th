@@ -78,6 +78,12 @@ Maintain ALL markdown formatting exactly, translating only the human-readable te
 - Inline emphasis — **bold** and *italic* — keep the * / ** markers wrapped around the translated words.
 - Links — [text](url) — translate the bracketed text but keep the (url) byte-for-byte unchanged.
 
+CRITICAL — translate the formatting 1:1; never introduce markup that is not already in the English source:
+- Do NOT add links. If the English text names a person, organization, or website as plain text (no [text](url) around it), keep it plain text in Thai. Output a [text](url) link ONLY where the exact same link already exists in the source. Never invent, guess, or look up a URL.
+- Do NOT change block structure. A paragraph stays a paragraph. Never convert paragraphs into bullet points (-) or blockquotes (>), never merge or split blocks, and never reorder them. The Thai must have the same number, type, and order of blocks (paragraphs, headings, lists, quotes) as the English — line for line.
+- Do NOT add emphasis. Never wrap words in ** or * unless the same word is already wrapped in the source (e.g. do not bold proper nouns like **Falun Dafa** if the English has them as plain text). Every * and ** you emit must come from the source, and every marker must stay balanced (each opener has its matching closer).
+- When in doubt, prefer fewer markers: emit plain text rather than risk adding formatting the source does not have.
+
 Article title: ${title_en}
 Article content: ${content_en}`;
 
