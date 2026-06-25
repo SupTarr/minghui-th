@@ -3,7 +3,7 @@
 :root {
   --background: #060913;
   --foreground: #f8fafc;
-  
+
   --font-display: var(--font-serif-th), var(--font-serif-en), serif;
   --font-sans: var(--font-sans-th), var(--font-sans-en), sans-serif;
 }
@@ -71,7 +71,8 @@ body {
 }
 
 @keyframes pulseOpacity {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.3;
   }
   50% {
@@ -84,7 +85,8 @@ body {
 }
 
 @keyframes float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0px) rotate(0deg);
   }
   50% {
