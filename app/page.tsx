@@ -144,19 +144,58 @@ export default function Dashboard() {
   const [googleIdToken, setGoogleIdToken] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
-  function handleGoogleLoginResponse(response: GoogleCredentialResponse) {
+  async function handleGoogleLoginResponse(response: GoogleCredentialResponse) {
     const idToken = response.credential;
     if (!idToken) return;
-    setGoogleIdToken(idToken);
 
+    let email: string | null = null;
     try {
       const payload = JSON.parse(atob(idToken.split(".")[1]));
-      setUserEmail(payload.email);
-      localStorage.setItem("google_id_token", idToken);
-      localStorage.setItem("google_user_email", payload.email);
+      email = payload.email ?? null;
     } catch (e) {
       console.error("Failed to parse ID token payload", e);
+      return;
     }
+
+    // Verify the account against the server allow-list before trusting the
+    // session, so a disallowed email never reaches a logged-in state — we bounce
+    // it straight back to the login screen instead of showing the email.
+    try {
+      const res = await fetch("/api/auth/verify", {
+        headers: { "X-Google-ID-Token": idToken },
+      });
+      if (!res.ok) {
+        const reason = await res
+          .json()
+          .then((d) => d?.reason as string | undefined)
+          .catch(() => undefined);
+        if (res.status === 403) {
+          console.warn(`Login denied — ไม่อนุญาต (${reason}): ${email}`);
+          addLog(
+            `❌ อีเมล ${email ?? "นี้"} ไม่ได้รับอนุญาตให้ใช้งานระบบ — กรุณาเข้าสู่ระบบด้วยบัญชีที่ได้รับสิทธิ์`,
+          );
+        } else {
+          console.warn(`Login rejected (${reason}): ${email}`);
+          addLog(
+            "❌ เซสชันไม่ถูกต้องหรือหมดอายุ — กรุณาเข้าสู่ระบบใหม่อีกครั้ง",
+          );
+        }
+        handleSignOut();
+        return;
+      }
+    } catch (e) {
+      // Network/verify failure: the email wasn't rejected, the check just didn't
+      // run. Fail closed (don't show the email) but say so accurately.
+      console.error("Auth verify failed", e);
+      addLog("❌ ไม่สามารถตรวจสอบสิทธิ์การเข้าสู่ระบบได้ — กรุณาลองใหม่อีกครั้ง");
+      handleSignOut();
+      return;
+    }
+
+    setGoogleIdToken(idToken);
+    setUserEmail(email);
+    localStorage.setItem("google_id_token", idToken);
+    if (email) localStorage.setItem("google_user_email", email);
   }
 
   function handleSignOut() {
