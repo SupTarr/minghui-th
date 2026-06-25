@@ -787,7 +787,9 @@ export default function Dashboard() {
           .json()
           .then((d) => (d?.error ? `: ${d.error}` : ""))
           .catch(() => "");
-        throw new Error(`แปลบทความไม่สำเร็จ (สถานะ ${transRes.status})${detail}`);
+        throw new Error(
+          `แปลบทความไม่สำเร็จ (สถานะ ${transRes.status})${detail}`,
+        );
       }
 
       const transData = await transRes.json();
@@ -824,7 +826,9 @@ export default function Dashboard() {
           .json()
           .then((d) => (d?.error ? `: ${d.error}` : ""))
           .catch(() => "");
-        throw new Error(`บันทึกบทความไม่สำเร็จ (สถานะ ${saveRes.status})${detail}`);
+        throw new Error(
+          `บันทึกบทความไม่สำเร็จ (สถานะ ${saveRes.status})${detail}`,
+        );
       }
 
       const saveData = await saveRes.json();
