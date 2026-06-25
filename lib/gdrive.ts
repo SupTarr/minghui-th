@@ -453,6 +453,11 @@ export interface CatalogEntry {
   date: string;
   category?: string;
   filePath: string;
+  // Content-validation summary (full per-rule detail lives in the article JSON).
+  // Kept on the entry so the archive list / "Needs review" tab can filter
+  // straight from the per-day index without reading every article file.
+  status?: "PASS" | "FAILED";
+  statusDesc?: string;
 }
 
 /**

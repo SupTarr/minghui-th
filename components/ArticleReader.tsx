@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import type { ArticleDetails } from "@/components/types";
+import { createInlineRegex } from "../lib/contentValidation";
 
 // Parses inline markdown — **bold**, *italic*, [text](url) — plus \n line breaks
 // within a block, returning React nodes. The block-level parser (renderContent)
@@ -11,8 +12,8 @@ import type { ArticleDetails } from "@/components/types";
 // printed as literal text.
 export function renderInline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const re =
-    /\*\*\*([^*]+)\*\*\*|\*\*([^*]+)\*\*|\*([^*\n]+)\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+  // Shared with the validator so "what renders" == "what is validated".
+  const re = createInlineRegex();
   let last = 0;
   let key = 0;
   let m: RegExpExecArray | null;

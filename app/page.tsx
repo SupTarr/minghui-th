@@ -32,9 +32,9 @@ interface WindowWithGoogle extends Window {
 export default function Dashboard() {
   const [archivedArticles, setArchivedArticles] = useState<Article[]>([]);
   const [newlySynced, setNewlySynced] = useState<Article[]>([]);
-  const [activeTab, setActiveTab] = useState<"archived" | "newly-synced">(
-    "archived",
-  );
+  const [activeTab, setActiveTab] = useState<
+    "archived" | "newly-synced" | "needs-review"
+  >("archived");
   const [isSyncing, setIsSyncing] = useState(false);
   const [newCount, setNewCount] = useState<number | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
@@ -63,11 +63,22 @@ export default function Dashboard() {
   const [currentPage, setCurrentPage] = useState(1);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // Articles the validator flagged FAILED, within the current date scope. Drawn
+  // from archivedArticles (which already includes this session's synced items),
+  // so backfilled old content and freshly flagged content share one tab.
+  const needsReview = useMemo(
+    () => archivedArticles.filter((a) => a.status === "FAILED"),
+    [archivedArticles],
+  );
+
   const listArticles = useMemo(() => {
     // The archive list is already date-scoped by the server fetch, so the
-    // "archived" tab renders it as-is; the other tab is this session's results.
-    return activeTab === "newly-synced" ? newlySynced : archivedArticles;
-  }, [activeTab, archivedArticles, newlySynced]);
+    // "archived" tab renders it as-is; "newly-synced" is this session's results,
+    // and "needs-review" is the date-scoped articles the validator flagged.
+    if (activeTab === "newly-synced") return newlySynced;
+    if (activeTab === "needs-review") return needsReview;
+    return archivedArticles;
+  }, [activeTab, archivedArticles, newlySynced, needsReview]);
 
   // Reset paging whenever the view (tab or date filter) changes. Done during
   // render (not in an effect) per React's "adjusting state on prop change"
@@ -187,7 +198,9 @@ export default function Dashboard() {
       // Network/verify failure: the email wasn't rejected, the check just didn't
       // run. Fail closed (don't show the email) but say so accurately.
       console.error("Auth verify failed", e);
-      addLog("❌ ไม่สามารถตรวจสอบสิทธิ์การเข้าสู่ระบบได้ — กรุณาลองใหม่อีกครั้ง");
+      addLog(
+        "❌ ไม่สามารถตรวจสอบสิทธิ์การเข้าสู่ระบบได้ — กรุณาลองใหม่อีกครั้ง",
+      );
       handleSignOut();
       return;
     }
@@ -578,6 +591,8 @@ export default function Dashboard() {
             content_th: transData.content_th,
             date: article.date,
             category: article.category,
+            // Persist the validator's result and flag the catalog entry.
+            validation: transData.validation,
           }),
           signal: controller.signal,
         });
@@ -605,6 +620,10 @@ export default function Dashboard() {
           date: article.date,
           category: saveData.entry?.category ?? article.category,
           filePath: saveData.filePath,
+          // Carry the validation flag so it rides into the per-day index and the
+          // session's in-memory lists (powering the "Needs review" tab).
+          status: saveData.entry?.status,
+          statusDesc: saveData.entry?.statusDesc,
         };
 
         // Dedupe before prepending: re-syncing an article (e.g. after an index
@@ -755,6 +774,7 @@ export default function Dashboard() {
             setActiveTab={setActiveTab}
             archivedArticles={archivedArticles}
             newlySynced={newlySynced}
+            needsReview={needsReview}
             listArticles={listArticles}
             currentPage={clampedPage}
             setCurrentPage={setCurrentPage}
