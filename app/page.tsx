@@ -166,15 +166,30 @@ export default function Dashboard() {
     localStorage.removeItem("google_user_email");
   }
 
+  // Returns true if a Google ID token (JWT) is missing, malformed, or past its exp.
+  function isTokenExpired(idToken: string): boolean {
+    try {
+      const payload = JSON.parse(atob(idToken.split(".")[1]));
+      if (typeof payload.exp !== "number") return true;
+      return Date.now() >= payload.exp * 1000;
+    } catch {
+      return true;
+    }
+  }
+
   // Load Google Identity Services dynamically
   useEffect(() => {
     const token = localStorage.getItem("google_id_token");
     const email = localStorage.getItem("google_user_email");
-    if (token && email) {
+    if (token && email && !isTokenExpired(token)) {
       setTimeout(() => {
         setGoogleIdToken(token);
         setUserEmail(email);
       }, 0);
+    } else {
+      // Stale or timed-out session: drop it so the email isn't shown.
+      localStorage.removeItem("google_id_token");
+      localStorage.removeItem("google_user_email");
     }
 
     fetch("/api/auth/config")
