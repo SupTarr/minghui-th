@@ -310,7 +310,8 @@ export function parseArticleHtml(html: string): ParsedArticle {
         // Many images share one caption (alt-less images, then the caption once); or
         // zero usable images (caption-only / unresolvable src) — keep the caption as
         // italic context, exactly as before. The loop is empty when srcs is empty.
-        for (const src of srcs) blocks.push({ text: `![](${src})`, isQuote: false });
+        for (const src of srcs)
+          blocks.push({ text: `![](${src})`, isQuote: false });
         const cap = italicizeCaption(caption);
         if (cap) blocks.push({ text: cap, isQuote: false });
       }

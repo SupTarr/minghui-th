@@ -31,9 +31,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const entries: Article[] = Array.isArray(body?.entries)
-      ? body.entries
-      : [];
+    const entries: Article[] = Array.isArray(body?.entries) ? body.entries : [];
 
     if (entries.length === 0) {
       return NextResponse.json({ success: true, added: 0, days: [] });
@@ -68,9 +66,7 @@ export async function POST(req: Request) {
       try {
         const current = await readDayIndex(date);
 
-        const merged = new Map<string, Article>(
-          current.map((e) => [e.url, e]),
-        );
+        const merged = new Map<string, Article>(current.map((e) => [e.url, e]));
         for (const entry of dayEntries) merged.set(entry.url, entry);
 
         await writeDayIndex(date, Array.from(merged.values()));
