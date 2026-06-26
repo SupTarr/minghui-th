@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "rules": {
     "content_sane": {
       "severity": "error",
@@ -48,6 +48,11 @@
       "severity": "warn",
       "label": "Link occurrence count matches EN",
       "message": "ลิงก์ปลายทางเหมือนกันแต่จำนวนลิงก์ต่างกัน (EN {enCount}, TH {thCount})"
+    },
+    "image_set": {
+      "severity": "error",
+      "label": "Image URL set matches EN",
+      "message": "รูปภาพปลายทางระหว่าง EN กับ TH ไม่ตรงกัน (ขาด {missingCount} เพิ่ม/เปลี่ยน {extraCount})"
     },
     "markdown_balance": {
       "severity": "error",

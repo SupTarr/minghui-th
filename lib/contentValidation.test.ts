@@ -68,6 +68,16 @@ describe("extractSkeleton", () => {
     const skel = extractSkeleton("**ก *ข* ค**");
     expect(skel[0].inlines).toEqual([{ kind: "bold" }, { kind: "italic" }]);
   });
+
+  it("classifies a standalone ![alt](url) as an image block, not a link", () => {
+    const skel = extractSkeleton(
+      "![A practitioner](https://en.minghui.org/u/article_images/a.jpg)",
+    );
+    expect(skel.map((b) => b.type)).toEqual(["image"]);
+    // The image URL must NOT surface as a link inline — image blocks are alt-only
+    // to the shared regex, so the `[alt](url)` substring is never matched as a link.
+    expect(skel.flatMap((b) => b.inlines)).toEqual([]);
+  });
 });
 
 describe("validateArticle — PASS", () => {
@@ -217,6 +227,53 @@ describe("validateArticle — differential markdown (no false positives)", () =>
     });
     expect(r.status).toBe("PASS");
     expect(failed("markdown_balance", r)).toBeFalsy();
+  });
+});
+
+describe("validateArticle — images", () => {
+  const IMG_EN = `# Title
+
+![A practitioner doing the exercises](https://en.minghui.org/u/article_images/a.jpg)
+
+A short story about a practitioner and her cultivation path is told here.`;
+  const IMG_TH = `# หัวข้อ
+
+![ผู้ฝึกฝนกำลังฝึกพลัง](https://en.minghui.org/u/article_images/a.jpg)
+
+เรื่องราวสั้นๆ เกี่ยวกับผู้ฝึกฝนและเส้นทางการบำเพ็ญของเธอถูกเล่าไว้ที่นี่`;
+  const imgBase = {
+    title_en: "Title",
+    title_th: "หัวข้อ",
+    content_en: IMG_EN,
+    content_th: IMG_TH,
+  };
+
+  it("passes when the image URL matches and the caption is translated", () => {
+    const r = validateArticle(imgBase);
+    expect(r.status).toBe("PASS");
+    expect(failed("image_set", r)).toBeFalsy();
+    expect(failed("markdown_balance", r)).toBeFalsy();
+    // The image URL must never be counted as a link.
+    expect(failed("link_set", r)).toBeFalsy();
+  });
+
+  it("flags a dropped image via image_set — not link_set", () => {
+    const content_th =
+      "# หัวข้อ\n\nเรื่องราวสั้นๆ เกี่ยวกับผู้ฝึกฝนและเส้นทางการบำเพ็ญของเธอถูกเล่าไว้ที่นี่";
+    const r = validateArticle({ ...imgBase, content_th });
+    expect(r.status).toBe("FAILED");
+    expect(failed("image_set", r)).toBeTruthy();
+    expect(failed("link_set", r)).toBeFalsy();
+  });
+
+  it("flags a mutated image URL", () => {
+    const content_th = IMG_TH.replace(
+      "https://en.minghui.org/u/article_images/a.jpg",
+      "https://en.minghui.org/u/article_images/WRONG.jpg",
+    );
+    const r = validateArticle({ ...imgBase, content_th });
+    expect(r.status).toBe("FAILED");
+    expect(failed("image_set", r)).toBeTruthy();
   });
 });
 
