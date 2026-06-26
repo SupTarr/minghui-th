@@ -24,9 +24,9 @@ describe("isAllowedArticleUrl (SSRF guard)", () => {
   });
 
   it("rejects internal / cloud-metadata SSRF targets", () => {
-    expect(isAllowedArticleUrl("http://169.254.169.254/latest/meta-data/")).toBe(
-      false,
-    );
+    expect(
+      isAllowedArticleUrl("http://169.254.169.254/latest/meta-data/"),
+    ).toBe(false);
     expect(isAllowedArticleUrl("http://localhost:6379/")).toBe(false);
     expect(isAllowedArticleUrl("http://10.0.0.5:8080/admin")).toBe(false);
   });
@@ -93,9 +93,7 @@ describe("parseTranslationResponse (Gemini reply shape)", () => {
   it("throws a clear error on the literal `null` (not a destructure TypeError)", () => {
     // The original bug: JSON.parse("null") -> null, then destructure threw
     // "Cannot destructure property 'title_th' of null".
-    expect(() => parseTranslationResponse("null")).toThrow(
-      /not a JSON object/,
-    );
+    expect(() => parseTranslationResponse("null")).toThrow(/not a JSON object/);
   });
 
   it("throws on non-object JSON (string / number)", () => {

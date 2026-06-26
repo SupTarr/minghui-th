@@ -62,7 +62,6 @@ export function renderInline(text: string): ReactNode[] {
 // and renders styled elements.
 function renderContent(content: string, lang: "th" | "en") {
   return content.split("\n\n").map((para, idx) => {
-    // 1. Headings
     if (para.startsWith("# ")) {
       return (
         <h1
@@ -106,7 +105,6 @@ function renderContent(content: string, lang: "th" | "en") {
       );
     }
 
-    // 2. Blockquotes (Gold-tinted Zen style)
     if (para.startsWith("> ")) {
       return (
         <blockquote
@@ -118,7 +116,6 @@ function renderContent(content: string, lang: "th" | "en") {
       );
     }
 
-    // 3. Bullet points / Lists
     if (para.startsWith("- ")) {
       return (
         <ul key={idx} className="list-disc pl-8 mb-3 space-y-1">
@@ -135,7 +132,6 @@ function renderContent(content: string, lang: "th" | "en") {
       );
     }
 
-    // 4. Code Blocks
     if (para.startsWith("```")) {
       const codeText = para.replace(/```[a-z]*\n?/g, "").replace(/```$/g, "");
       return (
@@ -148,12 +144,10 @@ function renderContent(content: string, lang: "th" | "en") {
       );
     }
 
-    // 5. Horizontal rule (a normalized decorative scene break)
     if (/^-{3,}$/.test(para.trim())) {
       return <hr key={idx} className="my-8 border-t border-slate-800/70" />;
     }
 
-    // 6. Standard Paragraph (Typographically tuned)
     return (
       <p
         key={idx}
