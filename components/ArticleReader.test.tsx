@@ -180,4 +180,27 @@ describe("renderContent — image blocks", () => {
     expect(acc.types).not.toContain("figcaption");
     expect(acc.src).toBe("https://en.minghui.org/u/article_images/b.jpg");
   });
+
+  it("groups alt-less images + a shared caption into one figure with a figcaption", () => {
+    const acc = { types: [] as string[], text: "", src: "", alt: "" };
+    collectBlocks(
+      renderContent(
+        [
+          "![](https://en.minghui.org/u/article_images/a.jpg)",
+          "![](https://en.minghui.org/u/article_images/b.jpg)",
+          "*Szilvia doing the exercises*",
+        ].join("\n\n"),
+        "th",
+      ),
+      acc,
+    );
+    // Exactly one figure wrapping both images and a single figcaption (not an
+    // indented <p>/em paragraph).
+    expect(acc.types.filter((t) => t === "figure")).toHaveLength(1);
+    expect(acc.types.filter((t) => t === "img")).toHaveLength(2);
+    expect(acc.types.filter((t) => t === "figcaption")).toHaveLength(1);
+    // Caption renders as plain text with its italic markers stripped.
+    expect(acc.text).toContain("Szilvia doing the exercises");
+    expect(acc.text).not.toContain("*");
+  });
 });

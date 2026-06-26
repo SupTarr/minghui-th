@@ -58,32 +58,81 @@ export function renderInline(text: string): ReactNode[] {
   return out;
 }
 
+// A whole block that is only italic caption line(s): *line* or *l1*\n*l2*. The
+// parser emits this for a multi-image container's shared caption (the images are
+// alt-less); matched ONLY when it directly follows an image run so a stray
+// emphasis paragraph elsewhere is never mistaken for a caption.
+const CAPTION_BLOCK_RE = /^\*[^*\n]+\*(?:\n\*[^*\n]+\*)*$/;
+
+// Strip the per-line italic markers so a shared caption renders as plain text,
+// exactly like a single image's alt (the parser already removed inner markup).
+function captionText(block: string): string {
+  return block
+    .split("\n")
+    .map((line) => line.replace(/^\*(.*)\*$/, "$1"))
+    .join("\n");
+}
+
+// A remote Minghui <img>, hotlinked from en.minghui.org; onError hides a broken
+// image so a figure degrades to caption-only. Inlined (not a component) so test
+// walkers and the JSX tree see a real <img>.
+function figureImage(
+  src: string,
+  alt: string,
+  className: string,
+  key?: number,
+) {
+  // next/image would need width/height plus a remotePatterns allowlist we
+  // intentionally skip for a simple hotlink of unknown dimensions.
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- simple remote hotlink
+    <img
+      key={key}
+      src={src}
+      alt={alt}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={(e) => {
+        e.currentTarget.style.display = "none";
+      }}
+      className={className}
+    />
+  );
+}
+
 // Parses markdown structures (headings, blockquotes, bullet lists, code blocks,
 // images) and renders styled elements. Exported for focused tests, like renderInline.
 export function renderContent(content: string, lang: "th" | "en") {
-  return content.split("\n\n").map((para, idx) => {
+  const blocks = content.split("\n\n");
+  const out: ReactNode[] = [];
+
+  for (let idx = 0; idx < blocks.length; idx++) {
+    const para = blocks[idx];
+
     if (para.startsWith("# ")) {
-      return (
+      out.push(
         <h1
           key={idx}
           className="text-2xl sm:text-3xl font-display font-bold tracking-tight mt-10 mb-4 text-slate-100 border-b border-slate-900/60 pb-3"
         >
           {renderInline(para.replace(/^#\s+/, ""))}
-        </h1>
+        </h1>,
       );
+      continue;
     }
     if (para.startsWith("## ")) {
-      return (
+      out.push(
         <h2
           key={idx}
           className="text-xl sm:text-2xl font-display font-bold tracking-tight mt-8 mb-4 text-slate-100"
         >
           {renderInline(para.replace(/^##\s+/, ""))}
-        </h2>
+        </h2>,
       );
+      continue;
     }
     if (para.startsWith("### ")) {
-      return (
+      out.push(
         <h3
           key={idx}
           className={`text-lg sm:text-xl font-display font-bold tracking-tight mt-6 mb-3 ${
@@ -91,33 +140,36 @@ export function renderContent(content: string, lang: "th" | "en") {
           }`}
         >
           {renderInline(para.replace(/^###\s+/, ""))}
-        </h3>
+        </h3>,
       );
+      continue;
     }
     if (para.startsWith("#### ")) {
-      return (
+      out.push(
         <h4
           key={idx}
           className="text-base sm:text-lg font-display font-bold tracking-tight mt-6 mb-3 text-slate-200"
         >
           {renderInline(para.replace(/^####\s+/, ""))}
-        </h4>
+        </h4>,
       );
+      continue;
     }
 
     if (para.startsWith("> ")) {
-      return (
+      out.push(
         <blockquote
           key={idx}
           className="border-l-2 border-amber-500/40 bg-[#0c1220]/25 px-6 py-4 my-6 rounded-r-xl italic text-slate-300 font-sans text-sm sm:text-base leading-loose"
         >
           {renderInline(para.replace(/^>\s?/gm, ""))}
-        </blockquote>
+        </blockquote>,
       );
+      continue;
     }
 
     if (para.startsWith("- ")) {
-      return (
+      out.push(
         <ul key={idx} className="list-disc pl-8 mb-3 space-y-1">
           <li
             className={`text-sm sm:text-base ${
@@ -128,57 +180,89 @@ export function renderContent(content: string, lang: "th" | "en") {
           >
             {renderInline(para.replace(/^-\s+/, ""))}
           </li>
-        </ul>
+        </ul>,
       );
+      continue;
     }
 
     if (para.startsWith("```")) {
       const codeText = para.replace(/```[a-z]*\n?/g, "").replace(/```$/g, "");
-      return (
+      out.push(
         <pre
           key={idx}
           className="bg-[#0c1220]/60 border border-slate-900 p-4 rounded-xl overflow-x-auto text-3xs font-mono my-5 text-teal-400/90 leading-relaxed"
         >
           <code>{codeText}</code>
-        </pre>
+        </pre>,
       );
+      continue;
     }
 
     if (/^-{3,}$/.test(para.trim())) {
-      return <hr key={idx} className="my-8 border-t border-slate-800/70" />;
+      out.push(<hr key={idx} className="my-8 border-t border-slate-800/70" />);
+      continue;
     }
 
-    // A standalone image block: ![alt](url). Uses the same matcher the validator
-    // classifies with, so "what renders" == "what is validated". Hotlinked from
-    // Minghui; onError hides a broken image so it degrades to caption-only.
+    // Image blocks: ![alt](url). Uses the same matcher the validator classifies
+    // with, so "what renders" == "what is validated". An alt-bearing image is its
+    // own figure with a figcaption (single-image container). Alt-less images come
+    // from a multi-image container: gather the consecutive run into ONE figure and
+    // attach the shared italic caption that follows as the group's figcaption.
     const image = matchImageBlock(para);
     if (image) {
       const [, alt, src] = image;
-      return (
-        <figure key={idx} className="my-8">
-          {/* eslint-disable-next-line @next/next/no-img-element -- remote Minghui
-              image of unknown dimensions; next/image would need width/height plus a
-              remotePatterns allowlist we intentionally skip for a simple hotlink. */}
-          <img
-            src={src}
-            alt={alt}
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-            className="mx-auto max-w-full h-auto rounded-xl border border-slate-900/60"
-          />
-          {alt && (
+      if (alt) {
+        out.push(
+          <figure key={idx} className="my-8">
+            {figureImage(
+              src,
+              alt,
+              "mx-auto max-w-full h-auto rounded-xl border border-slate-900/60",
+            )}
             <figcaption className="mt-3 text-center text-xs italic text-slate-400 font-sans">
               {alt}
             </figcaption>
+          </figure>,
+        );
+        continue;
+      }
+
+      const srcs = [src];
+      let j = idx + 1;
+      for (; j < blocks.length; j++) {
+        const m = matchImageBlock(blocks[j]);
+        if (!m || m[1]) break; // stop at a non-image or an alt-bearing image
+        srcs.push(m[2]);
+      }
+      let caption = "";
+      if (j < blocks.length && CAPTION_BLOCK_RE.test(blocks[j].trim())) {
+        caption = captionText(blocks[j].trim());
+        j++;
+      }
+      out.push(
+        <figure key={idx} className="my-8">
+          {srcs.map((s, i) =>
+            figureImage(
+              s,
+              "",
+              `mx-auto max-w-full h-auto rounded-xl border border-slate-900/60${
+                i > 0 ? " mt-4" : ""
+              }`,
+              i,
+            ),
           )}
-        </figure>
+          {caption && (
+            <figcaption className="mt-3 text-center text-xs italic text-slate-400 font-sans">
+              {renderInline(caption)}
+            </figcaption>
+          )}
+        </figure>,
       );
+      idx = j - 1; // skip the blocks consumed into this figure
+      continue;
     }
 
-    return (
+    out.push(
       <p
         key={idx}
         className={`indent-8 mb-5 text-sm sm:text-base ${
@@ -188,9 +272,11 @@ export function renderContent(content: string, lang: "th" | "en") {
         }`}
       >
         {renderInline(para)}
-      </p>
+      </p>,
     );
-  });
+  }
+
+  return out;
 }
 
 interface ArticleReaderProps {
