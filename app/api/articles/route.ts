@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
-import {
-  readDayIndex,
-  ARCHIVE_LIST_TAG,
-  type Article,
-} from "@/lib/gdrive";
+import { readDayIndex, ARCHIVE_LIST_TAG, type Article } from "@/lib/gdrive";
 import { toYMD } from "@/lib/date";
 
 export const dynamic = "force-dynamic";

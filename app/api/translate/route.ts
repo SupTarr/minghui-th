@@ -60,7 +60,9 @@ export async function POST(req: Request) {
     // site canonicalization (http→https, or en.→www.) still passes; an off-site
     // hop (to an internal/cloud-metadata host or another domain) is rejected.
     if (!isMinghuiSiteUrl(response.url)) {
-      throw new Error(`Article URL redirected off minghui.org: ${response.url}`);
+      throw new Error(
+        `Article URL redirected off minghui.org: ${response.url}`,
+      );
     }
 
     const html = await response.text();

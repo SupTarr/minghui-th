@@ -511,10 +511,7 @@ async function main() {
         }
 
         // Date misfiling: folder name == entry.date == file date.
-        if (
-          entry.date !== date ||
-          (art.date && art.date !== date)
-        ) {
+        if (entry.date !== date || (art.date && art.date !== date)) {
           au.dateMisfiled++;
           issues.push("dateMisfiled");
           log(
