@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { authorize } from "@/lib/auth";
 import {
   parseArticleHtml,
@@ -88,30 +88,31 @@ export async function POST(req: Request) {
       throw new Error("GEMINI_API_KEY environment variable is not defined.");
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    // Use gemini-2.5-flash as the standard robust and fast model
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-        // responseMimeType alone guarantees valid JSON but NOT its shape: on long
-        // articles the model segments the body and emits one `content_th` key per
-        // markdown block. Duplicate keys are valid JSON, so JSON.parse keeps only
-        // the last — the whole body collapses to the final paragraph. A schema
-        // makes a second `content_th` key structurally impossible.
-        responseSchema: {
-          type: SchemaType.OBJECT,
-          properties: {
-            title_th: { type: SchemaType.STRING },
-            content_th: { type: SchemaType.STRING },
-          },
-          required: ["title_th", "content_th"],
+    const ai = new GoogleGenAI({ apiKey });
+    // Use gemini-2.5-flash as the standard robust and fast model.
+    const generationConfig = {
+      responseMimeType: "application/json",
+      // responseMimeType alone guarantees valid JSON but NOT its shape: on long
+      // articles the model segments the body and emits one `content_th` key per
+      // markdown block. Duplicate keys are valid JSON, so JSON.parse keeps only
+      // the last — the whole body collapses to the final paragraph. A schema
+      // makes a second `content_th` key structurally impossible.
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          title_th: { type: Type.STRING },
+          content_th: { type: Type.STRING },
         },
-        // gemini-2.5-flash spends thinking tokens against the output budget; a
-        // generous cap keeps a long Thai body from being truncated mid-article.
-        maxOutputTokens: 32768,
+        required: ["title_th", "content_th"],
       },
-    });
+      // gemini-2.5-flash has "thinking" ON by default; on long articles it can
+      // burn that budget thinking and then emit a schema-valid but near-empty body
+      // (finishReason STOP after a single paragraph). Disable thinking — this is a
+      // mechanical, formatting-bound translation that needs none — so the entire
+      // output budget goes to the Thai text. The cap below then guards length.
+      thinkingConfig: { thinkingBudget: 0 },
+      maxOutputTokens: 32768,
+    };
 
     const prompt = `Translate the following English article to Thai. 
 Return JSON only matching this schema:
@@ -136,35 +137,91 @@ CRITICAL — translate the formatting 1:1; never introduce markup that is not al
 Article title: ${title_en}
 Article content: ${content_en}`;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    // Even with thinking off, gemini-2.5-flash still early-STOPs on long articles
+    // a good fraction of the time: the output is bimodal — either the full body or
+    // a single first paragraph (~90 output tokens, finishReason STOP), never a
+    // partial. Measured ~50% truncation PER CALL on a 50-block article, and the
+    // failure is independent per call (same article flips between runs), so retries
+    // genuinely fix it: re-call whenever the deterministic validator FAILs (or the
+    // JSON is unparseable). At ~50%/call, 6 attempts leaves ~1.6% residual failure;
+    // a truncated reply returns in well under a second (~90 tokens) and the first
+    // success short-circuits, so the loop stays far inside the cron 85s per-article
+    // timeout. We keep the last parseable result so a final-attempt parse error
+    // can't discard a usable body; only an all-unparseable run falls through to the
+    // route's catch (500). Anything still FAILED after the last attempt is persisted
+    // and surfaced in the "Needs review" admin tab (publish-all-and-flag).
+    const MAX_ATTEMPTS = 6;
+    let outcome:
+      | {
+          title_th: string;
+          content_th: string;
+          validation: ReturnType<typeof validateArticle>;
+        }
+      | undefined;
+    let lastParseError: unknown;
 
-    // Parse + shape-check the model reply (handles invalid JSON, a non-object
-    // like literal `null`, and missing string fields — see parseTranslationResponse).
-    // Log the raw text on failure for debugging, then let the route's catch 500 it.
-    let title_th: string;
-    let content_th: string;
-    try {
-      ({ title_th, content_th } = parseTranslationResponse(responseText));
-    } catch (e) {
-      console.error("Invalid Gemini translation response:", responseText);
-      throw e;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      let title_th: string;
+      let content_th: string;
+      let responseText: string | undefined;
+      // Parse + shape-check the model reply (handles invalid JSON, a non-object
+      // like literal `null`, and missing string fields — see parseTranslationResponse).
+      try {
+        const result = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: prompt,
+          config: generationConfig,
+        });
+        responseText = result.text;
+        if (!responseText) {
+          throw new Error("Gemini API returned an empty translation response.");
+        }
+        ({ title_th, content_th } = parseTranslationResponse(responseText));
+      } catch (e) {
+        // Log the raw text for debugging, then retry; a stochastic early-STOP or
+        // malformed reply rarely repeats.
+        lastParseError = e;
+        console.error(
+          `Gemini translation attempt ${attempt}/${MAX_ATTEMPTS} was unparseable:`,
+          responseText ?? "(no response text)",
+          e,
+        );
+        continue;
+      }
+
+      // Deterministic completeness/correctness check before the article is saved.
+      // Never blocks (publish-all-and-flag): the result is attached and persisted,
+      // and FAILED items surface in the "Needs review" admin tab. `html` is still
+      // in scope here, so the source-body completeness heuristic can run too.
+      const validation = validateArticle(
+        {
+          title_en,
+          content_en,
+          title_th,
+          content_th,
+          sourceTextLength: sourceBodyTextLength(html),
+        },
+        new Date().toISOString(),
+      );
+
+      // Retain the latest parseable result so a later parse failure can't throw
+      // away a usable (if FAILED) translation.
+      outcome = { title_th, content_th, validation };
+      if (validation.status === "PASS") break;
+      console.warn(
+        `Gemini translation attempt ${attempt}/${MAX_ATTEMPTS} validation FAILED; ` +
+          `${attempt < MAX_ATTEMPTS ? "retrying" : "keeping last result and flagging for review"}. ${validation.statusDesc}`,
+      );
     }
 
-    // Deterministic completeness/correctness check before the article is saved.
-    // Never blocks (publish-all-and-flag): the result is attached and persisted,
-    // and FAILED items surface in the "Needs review" admin tab. `html` is still
-    // in scope here, so the source-body completeness heuristic can run too.
-    const validation = validateArticle(
-      {
-        title_en,
-        content_en,
-        title_th,
-        content_th,
-        sourceTextLength: sourceBodyTextLength(html),
-      },
-      new Date().toISOString(),
-    );
+    if (!outcome) {
+      // Every attempt produced unparseable JSON — surface to the route catch (500).
+      throw (
+        lastParseError ??
+        new Error("Gemini translation produced no usable response.")
+      );
+    }
+    const { title_th, content_th, validation } = outcome;
 
     return NextResponse.json({
       title_en,

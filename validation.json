@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "rules": {
     "content_sane": {
       "severity": "error",
@@ -90,6 +90,14 @@
         "lenRatioMax": 3.0
       },
       "message": "สัดส่วนความยาว ไทย/อังกฤษ {ratio} อยู่นอกช่วง [{lenRatioMin}, {lenRatioMax}] (อาจถูกตัดทอนหรือซ้ำซ้อน)"
+    },
+    "severe_truncation": {
+      "severity": "error",
+      "label": "TH body not severely truncated",
+      "params": {
+        "severeTruncationMax": 0.15
+      },
+      "message": "เนื้อหาภาษาไทยสั้นผิดปกติ — สัดส่วนความยาว ไทย/อังกฤษ {ratio} ต่ำกว่าเกณฑ์ {severeTruncationMax} (น่าจะถูกตัดทอน)"
     },
     "parser_completeness": {
       "severity": "warn",

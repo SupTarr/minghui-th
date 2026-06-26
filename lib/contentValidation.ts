@@ -56,6 +56,7 @@ const BLOCK_UNTRANSLATED_MIN_LETTERS = param(
 const BLOCK_THAI_MIN = param("th_untranslated_block", "blockThaiMin"); // below this Thai-share, a block looks untranslated
 const LEN_RATIO_MIN = param("length_ratio", "lenRatioMin"); // content_th / content_en plain-text char ratio band
 const LEN_RATIO_MAX = param("length_ratio", "lenRatioMax");
+const SEVERE_TRUNCATION_MAX = param("severe_truncation", "severeTruncationMax"); // below this TH/EN ratio the body is truncated, not merely short (error)
 const COMPLETENESS_MIN = param("parser_completeness", "completenessMin"); // parsed-EN / source-body text ratio floor
 const MAX_CONTENT_CHARS = param("content_sane", "maxContentChars"); // beyond this, content is abnormal — skip heavy regex
 // A *consecutive*-run guard can't catch SPARSE adversarial markers ("[a[a[a…"),
@@ -84,6 +85,7 @@ const EXPECTED_RULE_IDS = [
   "th_untranslated_block",
   "block_drift",
   "length_ratio",
+  "severe_truncation",
   "parser_completeness",
   "validator_error",
 ] as const;
@@ -732,6 +734,18 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
     lrOk,
     undefined,
     lrOk ? undefined : { ratio: lr.toFixed(2) },
+  );
+
+  // 10b. severe_truncation (error) — a body far below any faithful Thai ratio is
+  //      a truncated reply (Gemini early-STOP), not a short translation. Unlike
+  //      the lenient length_ratio warn band, this flips status=FAILED so the
+  //      translate route's retry loop re-calls. Reuses lr/enLen — no recompute.
+  const truncOk = enLen === 0 || lr >= SEVERE_TRUNCATION_MAX;
+  add(
+    "severe_truncation",
+    truncOk,
+    undefined,
+    truncOk ? undefined : { ratio: lr.toFixed(2) },
   );
 
   // 11. parser_completeness (warn) — only when a source body length is supplied.
