@@ -4,7 +4,8 @@ import {
   isMinghuiSiteUrl,
   isValidArticleDate,
   isHttpUrl,
-  parseTranslationResponse,
+  cleanTitleText,
+  cleanTranslationText,
 } from "./apiValidation";
 
 describe("isAllowedArticleUrl (SSRF guard)", () => {
@@ -110,38 +111,53 @@ describe("isHttpUrl (stored-href guard)", () => {
   });
 });
 
-describe("parseTranslationResponse (Gemini reply shape)", () => {
-  it("returns the two string fields for a well-formed object", () => {
-    expect(
-      parseTranslationResponse('{"title_th":"ชื่อ","content_th":"เนื้อหา"}'),
-    ).toEqual({ title_th: "ชื่อ", content_th: "เนื้อหา" });
-  });
-
-  it("throws a clear error on the literal `null` (not a destructure TypeError)", () => {
-    // The original bug: JSON.parse("null") -> null, then destructure threw
-    // "Cannot destructure property 'title_th' of null".
-    expect(() => parseTranslationResponse("null")).toThrow(/not a JSON object/);
-  });
-
-  it("throws on non-object JSON (string / number)", () => {
-    expect(() => parseTranslationResponse('"a string"')).toThrow(
-      /not a JSON object/,
-    );
-    expect(() => parseTranslationResponse("42")).toThrow(/not a JSON object/);
-  });
-
-  it("throws on missing or non-string fields", () => {
-    expect(() => parseTranslationResponse('{"title_th":"ก"}')).toThrow(
-      /missing title_th\/content_th/,
-    );
-    expect(() => parseTranslationResponse("[1,2]")).toThrow(
-      /missing title_th\/content_th/,
+describe("cleanTranslationText (Gemini plain-text reply)", () => {
+  it("returns the trimmed markdown body unchanged", () => {
+    expect(cleanTranslationText("  สวัสดี\n\nเนื้อหา  ")).toBe(
+      "สวัสดี\n\nเนื้อหา",
     );
   });
 
-  it("throws on invalid JSON", () => {
-    expect(() => parseTranslationResponse("{not json")).toThrow(
-      /did not return valid JSON/,
+  it("strips a wrapping ```markdown / ``` code fence", () => {
+    expect(cleanTranslationText("```markdown\nเนื้อหา\n```")).toBe("เนื้อหา");
+    expect(cleanTranslationText("```\nบรรทัด\n```")).toBe("บรรทัด");
+  });
+
+  it("keeps an inner code fence that doesn't wrap the whole reply", () => {
+    const body = "ก่อน\n\n```\ncode\n```\n\nหลัง";
+    expect(cleanTranslationText(body)).toBe(body);
+  });
+
+  it("throws on an empty (or whitespace-only) reply", () => {
+    expect(() => cleanTranslationText("")).toThrow(/empty translation/);
+    expect(() => cleanTranslationText("   \n  ")).toThrow(/empty translation/);
+  });
+});
+
+describe("cleanTitleText (Gemini title reply)", () => {
+  it("returns a plain title unchanged", () => {
+    expect(cleanTitleText("ความเมตตาที่แท้จริง")).toBe("ความเมตตาที่แท้จริง");
+  });
+
+  it("peels surrounding straight and curly quotes", () => {
+    expect(cleanTitleText('"ความเมตตา"')).toBe("ความเมตตา");
+    expect(cleanTitleText("'ความเมตตา'")).toBe("ความเมตตา");
+    expect(cleanTitleText("“ความเมตตา”")).toBe("ความเมตตา");
+    expect(cleanTitleText("‘ความเมตตา’")).toBe("ความเมตตา");
+  });
+
+  it("collapses a stray newline and trims", () => {
+    expect(cleanTitleText("  ความเมตตา\nที่แท้จริง  ")).toBe(
+      "ความเมตตา ที่แท้จริง",
     );
+  });
+
+  it("keeps an interior quote that doesn't wrap the whole title", () => {
+    expect(cleanTitleText('เขาพูดว่า "ดี"')).toBe('เขาพูดว่า "ดี"');
+  });
+
+  it("throws when the reply is empty or only quotes", () => {
+    expect(() => cleanTitleText("")).toThrow(/empty/);
+    expect(() => cleanTitleText('""')).toThrow(/empty title/);
   });
 });
