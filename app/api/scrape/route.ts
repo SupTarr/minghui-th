@@ -1,26 +1,11 @@
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
-import { readDayIndex } from "@/lib/gdrive";
+import { readDayIndex, type ScrapedArticle } from "@/lib/gdrive";
 import { authorize } from "@/lib/auth";
 import { parseArticleDateFromUrl, parseDateText } from "@/lib/date";
 
 // Mark route as dynamic to ensure it doesn't get cached at build time
 export const dynamic = "force-dynamic";
-
-/**
- * One article as scraped from a Minghui category listing page — the shape
- * returned in `{ articles }` from this route's POST. It carries only what the
- * listing exposes (no body text, no `title_th`, no `filePath`); translation and
- * persistence downstream turn it into a catalog `Article` (lib/gdrive).
- * `category` is always present because the listing fixes the top-level section.
- */
-export interface ScrapedArticle {
-  url: string;
-  title_en: string;
-  date: string;
-  category: string;
-  subcategory?: string;
-}
 
 export async function POST(req: Request) {
   try {
