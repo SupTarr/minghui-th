@@ -6,46 +6,57 @@ import ArchiveList from "@/components/ArchiveList";
 import SyncConsole from "@/components/SyncConsole";
 import SyncControls from "@/components/SyncControls";
 import ArticleReader from "@/components/ArticleReader";
-import type { Article, ArticleDetails } from "@/components/types";
+import type { Article } from "@/components/types";
+import { toYMD, parseArticleDateFromUrl } from "@/lib/date";
+import { useGoogleAuth } from "@/hooks/useGoogleAuth";
+import { useArticleReader } from "@/hooks/useArticleReader";
 
-interface GoogleCredentialResponse {
-  credential?: string;
+// Prepend a freshly synced/imported article, dropping any prior copy with the
+// same filePath or url so re-running can't insert a duplicate React key.
+function prependArticle(article: Article, prev: Article[]): Article[] {
+  return [
+    article,
+    ...prev.filter(
+      (a) => a.filePath !== article.filePath && a.url !== article.url,
+    ),
+  ];
 }
 
-interface WindowWithGoogle extends Window {
-  google?: {
-    accounts: {
-      id: {
-        initialize: (config: {
-          client_id: string;
-          callback: (response: GoogleCredentialResponse) => void;
-        }) => void;
-        renderButton: (
-          element: HTMLElement,
-          options: { theme: string; size: string },
-        ) => void;
-      };
+// POST one entry to its per-day index.json. Throws on a non-OK status; callers
+// decide how to surface it (a failed index write only costs a re-translation
+// next sync — scrape-time dedup self-heals).
+async function writeIndexEntry(
+  entry: Article,
+  opts: { token: string; signal?: AbortSignal },
+): Promise<void> {
+  const res = await fetch("/api/index", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Google-ID-Token": opts.token,
+    },
+    body: JSON.stringify({ entries: [entry] }),
+    signal: opts.signal,
+  });
+  if (!res.ok) throw new Error(`Status ${res.status}`);
+}
+
+// Map an "Unauthorized:<code>" failure to its Thai log + status-bar messages,
+// shared by the sync and import flows (which handled it identically).
+function authErrorMessages(
+  code: string,
+  userEmail: string | null,
+): { log: string; status: string } {
+  if (code === "403") {
+    return {
+      log: `❌ อีเมล ${userEmail ?? "นี้"} ไม่อยู่ในรายชื่อที่ได้รับอนุญาตให้ใช้งานระบบ — โปรดติดต่อผู้ดูแลเพื่อขอสิทธิ์`,
+      status: "อีเมลไม่ได้รับอนุญาต",
     };
-  };
-}
-
-// Derive the YYYY-MM-DD date from a minghui article URL
-// (e.g. .../articles/2026/6/26/234818.html → 2026-06-26). Mirrors the parser in
-// app/api/scrape/route.ts. Falls back to today only as a safety net — minghui
-// article URLs always carry the date in the path.
-function parseDateFromArticleUrl(url: string): string {
-  const match = url.match(
-    /\/articles\/(\d{4})\/(\d{1,2})\/(\d{1,2})\/\d+\.html/,
-  );
-  if (match) {
-    const [, yyyy, mm, dd] = match;
-    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
   }
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return {
+    log: "❌ เซสชันหมดอายุหรือไม่ถูกต้อง — กรุณากด Sign Out แล้วลงชื่อเข้าใช้ใหม่อีกครั้ง",
+    status: "เซสชันหมดอายุ",
+  };
 }
 
 export default function Dashboard() {
@@ -66,18 +77,9 @@ export default function Dashboard() {
   const [startDate, setStartDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
+    return toYMD(d);
   });
-  const [endDate, setEndDate] = useState<string>(() => {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  });
+  const [endDate, setEndDate] = useState<string>(() => toYMD(new Date()));
 
   const PAGE_SIZE = 5;
   const [currentPage, setCurrentPage] = useState(1);
@@ -148,18 +150,6 @@ export default function Dashboard() {
     setCurrentPage(clampedPage);
   }
 
-  const [readingArticlePath, setReadingArticlePath] = useState<string | null>(
-    null,
-  );
-  const [articleContent, setArticleContent] = useState<ArticleDetails | null>(
-    null,
-  );
-  const [isLoadingArticle, setIsLoadingArticle] = useState(false);
-  const [articleError, setArticleError] = useState(false);
-  const [readerLanguage, setReaderLanguage] = useState<"th" | "en" | "both">(
-    "th",
-  );
-
   const isCancelledRef = useRef(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -183,256 +173,19 @@ export default function Dashboard() {
     }
   }
 
-  function openArticle(path: string) {
-    setReadingArticlePath(path);
-    const params = new URLSearchParams(window.location.search);
-    params.set("article", path);
-    const newUrl = `${window.location.pathname}?${params.toString()}`;
-    window.history.pushState({ path: newUrl }, "", newUrl);
-  }
-
-  function closeArticle() {
-    setReadingArticlePath(null);
-    const params = new URLSearchParams(window.location.search);
-    params.delete("article");
-    const newUrl = params.toString()
-      ? `${window.location.pathname}?${params.toString()}`
-      : window.location.pathname;
-    window.history.pushState({ path: newUrl }, "", newUrl);
-  }
-
-  const [copied, setCopied] = useState(false);
-  const [googleIdToken, setGoogleIdToken] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-
-  // Stable (useCallback) so the mount-only bootstrap effect below can depend on
-  // handleGoogleLoginResponse without re-injecting the Google SDK each render.
-  const handleSignOut = useCallback(() => {
-    setGoogleIdToken(null);
-    setUserEmail(null);
-    localStorage.removeItem("google_id_token");
-    localStorage.removeItem("google_user_email");
-  }, []);
-
-  const handleGoogleLoginResponse = useCallback(async (
-    response: GoogleCredentialResponse,
-  ) => {
-    const idToken = response.credential;
-    if (!idToken) return;
-
-    let email: string | null = null;
-    try {
-      const payload = JSON.parse(atob(idToken.split(".")[1]));
-      email = payload.email ?? null;
-    } catch (e) {
-      console.error("Failed to parse ID token payload", e);
-      return;
-    }
-
-    // Verify the account against the server allow-list before trusting the
-    // session, so a disallowed email never reaches a logged-in state — we bounce
-    // it straight back to the login screen instead of showing the email.
-    try {
-      const res = await fetch("/api/auth/verify", {
-        headers: { "X-Google-ID-Token": idToken },
-      });
-      if (!res.ok) {
-        const reason = await res
-          .json()
-          .then((d) => d?.reason as string | undefined)
-          .catch(() => undefined);
-        if (res.status === 403) {
-          console.warn(`Login denied — ไม่อนุญาต (${reason}): ${email}`);
-          addLog(
-            `❌ อีเมล ${email ?? "นี้"} ไม่ได้รับอนุญาตให้ใช้งานระบบ — กรุณาเข้าสู่ระบบด้วยบัญชีที่ได้รับสิทธิ์`,
-          );
-        } else {
-          console.warn(`Login rejected (${reason}): ${email}`);
-          addLog(
-            "❌ เซสชันไม่ถูกต้องหรือหมดอายุ — กรุณาเข้าสู่ระบบใหม่อีกครั้ง",
-          );
-        }
-        handleSignOut();
-        return;
-      }
-    } catch (e) {
-      // Network/verify failure: the email wasn't rejected, the check just didn't
-      // run. Fail closed (don't show the email) but say so accurately.
-      console.error("Auth verify failed", e);
-      addLog(
-        "❌ ไม่สามารถตรวจสอบสิทธิ์การเข้าสู่ระบบได้ — กรุณาลองใหม่อีกครั้ง",
-      );
-      handleSignOut();
-      return;
-    }
-
-    setGoogleIdToken(idToken);
-    setUserEmail(email);
-    localStorage.setItem("google_id_token", idToken);
-    if (email) localStorage.setItem("google_user_email", email);
-  }, [addLog, handleSignOut]);
-
-  // Returns true if a Google ID token (JWT) is missing, malformed, or past its exp.
-  function isTokenExpired(idToken: string): boolean {
-    try {
-      const payload = JSON.parse(atob(idToken.split(".")[1]));
-      if (typeof payload.exp !== "number") return true;
-      return Date.now() >= payload.exp * 1000;
-    } catch {
-      return true;
-    }
-  }
-
-  // Load Google Identity Services dynamically
-  useEffect(() => {
-    const token = localStorage.getItem("google_id_token");
-    const email = localStorage.getItem("google_user_email");
-    if (token && email && !isTokenExpired(token)) {
-      setTimeout(() => {
-        setGoogleIdToken(token);
-        setUserEmail(email);
-      }, 0);
-    } else {
-      // Stale or timed-out session: drop it so the email isn't shown.
-      localStorage.removeItem("google_id_token");
-      localStorage.removeItem("google_user_email");
-    }
-
-    fetch("/api/auth/config")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.clientId) {
-          const script = document.createElement("script");
-          script.src = "https://accounts.google.com/gsi/client";
-          script.async = true;
-          script.defer = true;
-          document.body.appendChild(script);
-
-          script.onload = () => {
-            const google = (window as unknown as WindowWithGoogle).google;
-            if (google) {
-              google.accounts.id.initialize({
-                client_id: data.clientId,
-                callback: handleGoogleLoginResponse,
-              });
-
-              const btn = document.getElementById("google-signin-btn");
-              if (btn) {
-                google.accounts.id.renderButton(btn, {
-                  theme: "outline",
-                  size: "large",
-                });
-              }
-            }
-          };
-        }
-      })
-      .catch((err) => console.error("Failed to load auth config:", err));
-  }, [handleGoogleLoginResponse]);
-
-  async function handleCopyShareLink() {
-    if (!readingArticlePath) return;
-    const shareUrl = `${window.location.origin}${window.location.pathname}?article=${encodeURIComponent(readingArticlePath)}`;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl);
-      } else {
-        // The async Clipboard API is undefined in non-secure (http) contexts;
-        // fall back to a hidden textarea + execCommand so copy still works.
-        const ta = document.createElement("textarea");
-        ta.value = shareUrl;
-        ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.select();
-        const ok = document.execCommand("copy");
-        document.body.removeChild(ta);
-        if (!ok) throw new Error("execCommand copy failed");
-      }
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (e) {
-      console.error("Copy failed", e);
-      addLog("⚠️ คัดลอกลิงก์ไม่สำเร็จ");
-    }
-  }
-
-  const loadArticleContent = useCallback(
-    async (path: string, signal?: AbortSignal) => {
-      try {
-        setIsLoadingArticle(true);
-        setArticleError(false);
-        const res = await fetch(
-          `/api/article?filePath=${encodeURIComponent(path)}`,
-          { signal },
-        );
-        if (signal?.aborted) return;
-        if (res.ok) {
-          const data = await res.json();
-          if (signal?.aborted) return;
-          setArticleContent(data);
-        } else {
-          setArticleError(true);
-          addLog(`❌ โหลดบทความล้มเหลว: ${path}`);
-        }
-      } catch (e) {
-        if ((e as Error)?.name === "AbortError") return;
-        console.error(e);
-        setArticleError(true);
-        addLog(`❌ เกิดข้อผิดพลาดในการโหลดบทความ: ${path}`);
-      } finally {
-        if (!signal?.aborted) setIsLoadingArticle(false);
-      }
-    },
-    [addLog],
-  );
-
-  // Fetch article content on path update. Guard against out-of-order responses:
-  // a rapid path change A→B must not let A's slower response render under B's
-  // URL. Abort the in-flight fetch and cancel the deferred call on cleanup.
-  useEffect(() => {
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    if (readingArticlePath) {
-      const path = readingArticlePath;
-      timer = setTimeout(() => {
-        // Clear any prior article so a slow load can't flash stale content.
-        setArticleContent(null);
-        setArticleError(false);
-        loadArticleContent(path, controller.signal);
-      }, 0);
-    } else {
-      timer = setTimeout(() => {
-        setArticleContent(null);
-        setArticleError(false);
-        setIsLoadingArticle(false);
-      }, 0);
-    }
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [readingArticlePath, loadArticleContent]);
-
-  // Synchronize readingArticlePath with URL on mount & handle browser back/forward buttons
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const articleParam = params.get("article");
-    if (articleParam) {
-      setTimeout(() => {
-        setReadingArticlePath(articleParam);
-      }, 0);
-    }
-
-    function handlePopState() {
-      const p = new URLSearchParams(window.location.search);
-      const art = p.get("article");
-      setReadingArticlePath(art || null);
-    }
-
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  const { googleIdToken, userEmail, handleSignOut } = useGoogleAuth(addLog);
+  const {
+    readingArticlePath,
+    articleContent,
+    isLoadingArticle,
+    articleError,
+    readerLanguage,
+    setReaderLanguage,
+    openArticle,
+    closeArticle,
+    handleCopyShareLink,
+    copied,
+  } = useArticleReader(addLog);
 
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -444,10 +197,6 @@ export default function Dashboard() {
       try {
         setLoadingInitial(true);
         setArchiveError(false);
-        const fmt = (d: Date) =>
-          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-            d.getDate(),
-          ).padStart(2, "0")}`;
 
         let from: string;
         let to: string;
@@ -458,8 +207,8 @@ export default function Dashboard() {
           const today = new Date();
           const past = new Date();
           past.setDate(today.getDate() - 7);
-          to = fmt(today);
-          from = fmt(past);
+          to = toYMD(today);
+          from = toYMD(past);
         }
 
         const res = await fetch(`/api/articles?from=${from}&to=${to}`, {
@@ -680,16 +429,8 @@ export default function Dashboard() {
         // Dedupe before prepending: re-syncing an article (e.g. after an index
         // write failed on the first pass) would otherwise insert a second card
         // with the same React key.
-        const dedupePrepend = (prev: Article[]) => [
-          syncedArticle,
-          ...prev.filter(
-            (a) =>
-              a.filePath !== syncedArticle.filePath &&
-              a.url !== syncedArticle.url,
-          ),
-        ];
-        setNewlySynced(dedupePrepend);
-        setArchivedArticles(dedupePrepend);
+        setNewlySynced((prev) => prependArticle(syncedArticle, prev));
+        setArchivedArticles((prev) => prependArticle(syncedArticle, prev));
 
         // Write this article's entry to its per-day index.json immediately,
         // right after the save succeeds (the index points at the saved file).
@@ -698,18 +439,10 @@ export default function Dashboard() {
         // failed index write only costs a re-translation next sync (dedup
         // self-heals), so we warn and keep going.
         try {
-          const indexRes = await fetch("/api/index", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Google-ID-Token": googleIdToken || "",
-            },
-            body: JSON.stringify({ entries: [syncedArticle] }),
+          await writeIndexEntry(syncedArticle, {
+            token: googleIdToken || "",
             signal: controller.signal,
           });
-          if (!indexRes.ok) {
-            throw new Error(`Status ${indexRes.status}`);
-          }
           addLog("🗂️ อัปเดตดัชนีคลังบทความแล้ว");
         } catch (e) {
           if (isCancelledRef.current) {
@@ -747,19 +480,9 @@ export default function Dashboard() {
         console.error(err);
         const authMatch = err.message?.match(/Unauthorized:(\d+)/);
         if (authMatch) {
-          if (authMatch[1] === "403") {
-            // Valid Google sign-in, but the email isn't on the allow-list.
-            addLog(
-              `❌ อีเมล ${userEmail ?? "นี้"} ไม่อยู่ในรายชื่อที่ได้รับอนุญาตให้ใช้งานระบบ — โปรดติดต่อผู้ดูแลเพื่อขอสิทธิ์`,
-            );
-            setStatusMessage("อีเมลไม่ได้รับอนุญาต");
-          } else {
-            // 401 — token missing/expired/invalid.
-            addLog(
-              "❌ เซสชันหมดอายุหรือไม่ถูกต้อง — กรุณากด Sign Out แล้วลงชื่อเข้าใช้ใหม่อีกครั้ง",
-            );
-            setStatusMessage("เซสชันหมดอายุ");
-          }
+          const { log, status } = authErrorMessages(authMatch[1], userEmail);
+          addLog(log);
+          setStatusMessage(status);
         } else {
           setStatusMessage("เกิดข้อผิดพลาดในการแปล/บันทึก");
           addLog(`❌ ข้อผิดพลาด: ${err.message || String(err)}`);
@@ -797,7 +520,9 @@ export default function Dashboard() {
       addLog(`กำลังนำเข้าบทความจากลิงก์: ${url}`);
       setStatusMessage("กำลังนำเข้าบทความจากลิงก์...");
 
-      const date = parseDateFromArticleUrl(url);
+      // Minghui article URLs carry the date in the path; fall back to today only
+      // as a safety net (the URL was already shape-checked to end in /<id>.html).
+      const date = parseArticleDateFromUrl(url) ?? toYMD(new Date());
 
       const transRes = await fetch("/api/translate", {
         method: "POST",
@@ -877,31 +602,13 @@ export default function Dashboard() {
 
       // Dedupe before prepending so re-importing the same URL can't double-insert
       // a card with the same React key (matches the sync loop's behavior).
-      const dedupePrepend = (prev: Article[]) => [
-        importedArticle,
-        ...prev.filter(
-          (a) =>
-            a.filePath !== importedArticle.filePath &&
-            a.url !== importedArticle.url,
-        ),
-      ];
-      setNewlySynced(dedupePrepend);
-      setArchivedArticles(dedupePrepend);
+      setNewlySynced((prev) => prependArticle(importedArticle, prev));
+      setArchivedArticles((prev) => prependArticle(importedArticle, prev));
 
       // Write the per-day index entry. A failed index write only costs a
       // re-translation on the next sync (dedup self-heals), so warn and continue.
       try {
-        const indexRes = await fetch("/api/index", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Google-ID-Token": googleIdToken || "",
-          },
-          body: JSON.stringify({ entries: [importedArticle] }),
-        });
-        if (!indexRes.ok) {
-          throw new Error(`Status ${indexRes.status}`);
-        }
+        await writeIndexEntry(importedArticle, { token: googleIdToken || "" });
         addLog("🗂️ อัปเดตดัชนีคลังบทความแล้ว");
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -918,17 +625,9 @@ export default function Dashboard() {
       console.error(err);
       const authMatch = err.message?.match(/Unauthorized:(\d+)/);
       if (authMatch) {
-        if (authMatch[1] === "403") {
-          addLog(
-            `❌ อีเมล ${userEmail ?? "นี้"} ไม่อยู่ในรายชื่อที่ได้รับอนุญาตให้ใช้งานระบบ — โปรดติดต่อผู้ดูแลเพื่อขอสิทธิ์`,
-          );
-          setStatusMessage("อีเมลไม่ได้รับอนุญาต");
-        } else {
-          addLog(
-            "❌ เซสชันหมดอายุหรือไม่ถูกต้อง — กรุณากด Sign Out แล้วลงชื่อเข้าใช้ใหม่อีกครั้ง",
-          );
-          setStatusMessage("เซสชันหมดอายุ");
-        }
+        const { log, status } = authErrorMessages(authMatch[1], userEmail);
+        addLog(log);
+        setStatusMessage(status);
       } else {
         setStatusMessage("เกิดข้อผิดพลาดในการนำเข้าบทความ");
         addLog(`❌ ข้อผิดพลาด: ${err.message || String(err)}`);

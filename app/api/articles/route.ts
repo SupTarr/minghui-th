@@ -5,17 +5,11 @@ import {
   ARCHIVE_LIST_TAG,
   type Article,
 } from "@/lib/gdrive";
+import { toYMD } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
 const MAX_DAYS = 7;
-
-function toDateStr(d: Date): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
 
 /**
  * Builds the list of date strings in [from, to], newest first, capped at
@@ -39,7 +33,7 @@ function enumerateDates(from: string | null, to: string | null): string[] {
   const dates: string[] = [];
   const cursor = new Date(end);
   while (cursor >= start && dates.length < MAX_DAYS) {
-    dates.push(toDateStr(cursor));
+    dates.push(toYMD(cursor));
     cursor.setDate(cursor.getDate() - 1);
   }
   return dates;
@@ -99,8 +93,10 @@ export async function GET(req: Request) {
   } catch (error) {
     const err = error as Error;
     console.error("Error in GET /api/articles:", err);
+    // Public endpoint: return a generic message; the real error is in the log
+    // above. Echoing err.message could leak internal/Drive details to any caller.
     return NextResponse.json(
-      { error: err.message || "Internal Server Error" },
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }
