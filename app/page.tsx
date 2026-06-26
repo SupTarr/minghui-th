@@ -76,7 +76,10 @@ export default function Dashboard() {
   const [archiveError, setArchiveError] = useState(false);
   const [startDate, setStartDate] = useState<string>(() => {
     const d = new Date();
-    d.setDate(d.getDate() - 7);
+    // 7 inclusive days (today-6 … today) to match the server's MAX_DAYS=7 cap;
+    // today-7 would be 8 days and the server silently drops the oldest (the
+    // displayed start date), so it would never render.
+    d.setDate(d.getDate() - 6);
     return toYMD(d);
   });
   const [endDate, setEndDate] = useState<string>(() => toYMD(new Date()));
@@ -206,7 +209,7 @@ export default function Dashboard() {
         } else {
           const today = new Date();
           const past = new Date();
-          past.setDate(today.getDate() - 7);
+          past.setDate(today.getDate() - 6);
           to = toYMD(today);
           from = toYMD(past);
         }
