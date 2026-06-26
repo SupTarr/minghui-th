@@ -55,6 +55,14 @@ describe("extractSkeleton", () => {
       { kind: "link", url: "https://en.minghui.org/hy" },
     ]);
   });
+
+  it("recurses into bold to find a nested italic (**a *b* c**)", () => {
+    // The lazy-balanced emphasis regex lets the outer ** capture the whole inner
+    // run, so the shared regex (renderer + validator) sees [bold, italic] rather
+    // than orphan markers.
+    const skel = extractSkeleton("**ก *ข* ค**");
+    expect(skel[0].inlines).toEqual([{ kind: "bold" }, { kind: "italic" }]);
+  });
 });
 
 describe("validateArticle — PASS", () => {
@@ -166,6 +174,19 @@ describe("validateArticle — FAILED (error checks)", () => {
     expect(r.status).toBe("FAILED");
     expect(failed("content_sane", r)).toBeTruthy();
   });
+
+  it("short-circuits on SPARSE markers the consecutive-run guard misses (no hang)", () => {
+    // "[a[a[a…" never has 200 in a row, so PATHOLOGICAL_RUN can't catch it, but it
+    // still drives the link regex into O(n^2). The total-marker-count guard does.
+    const r = validateArticle({
+      title_en: "t",
+      title_th: "หัว",
+      content_en: "# Title\n\nbody",
+      content_th: "[a".repeat(5000), // 5000 '[' total, never consecutive
+    });
+    expect(r.status).toBe("FAILED");
+    expect(failed("content_sane", r)).toBeTruthy();
+  });
 });
 
 describe("validateArticle — differential markdown (no false positives)", () => {
@@ -175,6 +196,19 @@ describe("validateArticle — differential markdown (no false positives)", () =>
       title_th: "รายงาน",
       content_en: "Officer L*** detained the practitioner at the station.",
       content_th: "เจ้าหน้าที่ L*** ควบคุมตัวผู้ฝึกไว้ที่สถานี",
+    });
+    expect(r.status).toBe("PASS");
+    expect(failed("markdown_balance", r)).toBeFalsy();
+  });
+
+  it("does NOT flag balanced nested emphasis (**bold *italic* bold**) as introduced markup", () => {
+    // The lazy regex now consumes the whole nested run on both sides, so no orphan
+    // '*' residue is left — what the reader renders cleanly, the validator passes.
+    const r = validateArticle({
+      title_en: "t",
+      title_th: "หัว",
+      content_en: "He said to **read *Zhuan Falun* often** every day.",
+      content_th: "เขาบอกให้ **อ่าน *จ้วนฝ่าหลุน* บ่อยครั้ง** ทุกวัน",
     });
     expect(r.status).toBe("PASS");
     expect(failed("markdown_balance", r)).toBeFalsy();
