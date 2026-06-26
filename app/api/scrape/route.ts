@@ -6,6 +6,21 @@ import { authorize } from "@/lib/auth";
 // Mark route as dynamic to ensure it doesn't get cached at build time
 export const dynamic = "force-dynamic";
 
+/**
+ * One article as scraped from a Minghui category listing page — the shape
+ * returned in `{ articles }` from this route's POST. It carries only what the
+ * listing exposes (no body text, no `title_th`, no `filePath`); translation and
+ * persistence downstream turn it into a catalog `Article` (lib/gdrive).
+ * `category` is always present because the listing fixes the top-level section.
+ */
+export interface ScrapedArticle {
+  url: string;
+  title_en: string;
+  date: string;
+  category: string;
+  subcategory?: string;
+}
+
 function parseDateFromUrl(href: string): string | null {
   // Pattern: /html/articles/YYYY/M/D/ID.html
   const match = href.match(
@@ -70,13 +85,7 @@ export async function POST(req: Request) {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    const articles: Array<{
-      url: string;
-      title_en: string;
-      date: string;
-      category: string;
-      subcategory?: string;
-    }> = [];
+    const articles: ScrapedArticle[] = [];
 
     // Select recent articles list elements
     $(".main-category-articles-list li a").each((_, el) => {
