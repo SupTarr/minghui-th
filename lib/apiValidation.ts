@@ -61,35 +61,52 @@ export function isHttpUrl(url: unknown): boolean {
 }
 
 /**
- * Parse Gemini's translation reply into its two required string fields.
- * responseMimeType guarantees valid JSON but not the shape (there's no
- * responseSchema), and JSON.parse can return a non-object — the literal `null`,
- * or a string/number, is valid JSON — which would throw a misleading TypeError on
- * destructure. Validate explicitly so a malformed reply fails at its real cause.
- * Throws (caught by the route's try/catch) on any of: invalid JSON, non-object,
- * or missing/non-string title_th/content_th.
+ * Clean Gemini's plain-text (markdown) translation reply.
+ * The translate route asks for the Thai markdown DIRECTLY — not JSON — because
+ * JSON mode's constrained decoding makes the model close the object early and
+ * truncate long bodies (finishReason STOP after one block). The model returns the
+ * body verbatim, but can occasionally wrap it in a ```markdown … ``` fence or pad
+ * it with surrounding whitespace. Strip a single fence ONLY when it brackets the
+ * whole reply (so an inner code block is left intact) and trim. Throws (caught by
+ * the route's try/catch) on an empty reply.
  */
-export function parseTranslationResponse(responseText: string): {
-  title_th: string;
-  content_th: string;
-} {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(responseText);
-  } catch {
-    throw new Error("Gemini API did not return valid JSON translation.");
+export function cleanTranslationText(raw: string): string {
+  let text = (raw ?? "").trim();
+  const wrapped = text.match(/^```[a-zA-Z]*\s*\n([\s\S]*?)\n?```$/);
+  if (wrapped) text = wrapped[1].trim();
+  if (!text) {
+    throw new Error("Gemini API returned an empty translation.");
   }
-  if (!parsed || typeof parsed !== "object") {
-    throw new Error("Gemini translation is not a JSON object.");
+  return text;
+}
+
+/**
+ * Clean Gemini's plain-text TITLE reply. A title is a single line, but despite
+ * the prompt's "no quotes / no preamble" instruction the model often wraps a
+ * title in quotation marks — and nothing downstream would strip them, so the
+ * stored title_th could ship as `"ความเมตตา"`. Reuses {@link cleanTranslationText}
+ * (trim, unwrap a stray ``` fence, reject empty), collapses any stray newline to
+ * a space, then peels surrounding straight/curly quote pairs. Throws on empty.
+ */
+export function cleanTitleText(raw: string): string {
+  let text = cleanTranslationText(raw).replace(/\s+/g, " ").trim();
+  const quotePairs: [string, string][] = [
+    ['"', '"'],
+    ["'", "'"],
+    ["“", "”"], // “ ”
+    ["‘", "’"], // ‘ ’
+  ];
+  for (let peeled = true; peeled; ) {
+    peeled = false;
+    for (const [open, close] of quotePairs) {
+      if (text.length >= 2 && text.startsWith(open) && text.endsWith(close)) {
+        text = text.slice(open.length, text.length - close.length).trim();
+        peeled = true;
+      }
+    }
   }
-  const { title_th, content_th } = parsed as {
-    title_th?: unknown;
-    content_th?: unknown;
-  };
-  if (typeof title_th !== "string" || typeof content_th !== "string") {
-    throw new Error(
-      "Gemini translation is missing title_th/content_th string fields.",
-    );
+  if (!text) {
+    throw new Error("Gemini API returned an empty title translation.");
   }
-  return { title_th, content_th };
+  return text;
 }
