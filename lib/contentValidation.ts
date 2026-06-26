@@ -155,6 +155,29 @@ export function toStoredRecord(r: ValidationResult): StoredValidation {
   };
 }
 
+/**
+ * True iff `v` is a full in-memory {@link ValidationResult} (carries the `checks`
+ * array). /api/translate sends this; a manual re-save may instead send an already
+ * slim {@link StoredValidation}. Lets the save route narrow an untrusted body
+ * without an `as unknown as` cast.
+ */
+export function isValidationResult(v: unknown): v is ValidationResult {
+  return (
+    !!v &&
+    typeof v === "object" &&
+    Array.isArray((v as ValidationResult).checks)
+  );
+}
+
+/** True iff `v` is already a slim {@link StoredValidation} (status + failures[]). */
+export function isStoredValidation(v: unknown): v is StoredValidation {
+  if (!v || typeof v !== "object") return false;
+  const r = v as StoredValidation;
+  return (
+    (r.status === "PASS" || r.status === "FAILED") && Array.isArray(r.failures)
+  );
+}
+
 export interface ValidateInput {
   title_en: string;
   content_en: string;
@@ -218,7 +241,8 @@ export function createInlineRegex(): RegExp {
 // images alt-less). Exported so the renderer and the validator share ONE matcher —
 // the same "what validates == what renders" guarantee createInlineRegex provides.
 // No /g flag, so a single module-level compiled regex is safe to reuse.
-export const IMAGE_BLOCK_PATTERN = "^!\\[([^\\]]*)\\]\\((https?:\\/\\/[^)\\s]+)\\)$";
+export const IMAGE_BLOCK_PATTERN =
+  "^!\\[([^\\]]*)\\]\\((https?:\\/\\/[^)\\s]+)\\)$";
 const IMAGE_BLOCK_RE = new RegExp(IMAGE_BLOCK_PATTERN);
 
 /** Match a trimmed block against IMAGE_BLOCK_PATTERN; m[1] = alt, m[2] = url. */

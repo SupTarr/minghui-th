@@ -461,6 +461,18 @@ export interface ArticleCore {
 }
 
 /**
+ * One article as scraped from a Minghui category listing page — the shape returned
+ * in `{ articles }` from /api/scrape. It carries only what the listing exposes (no
+ * body, no `title_th`, no `filePath`); translation + persistence downstream turn it
+ * into a catalog {@link Article}. Derived from {@link ArticleCore} so its shared
+ * fields can't drift — `title_th` is dropped, and `category` is made REQUIRED
+ * because the listing always fixes the top-level section.
+ */
+export type ScrapedArticle = Omit<ArticleCore, "title_th" | "category"> & {
+  category: string;
+};
+
+/**
  * A single article's entry in the lightweight catalog (per-day index).
  */
 export interface Article extends ArticleCore {
@@ -520,14 +532,14 @@ export async function readFailuresIndex(): Promise<Article[]> {
   const data = await readFile(NEEDS_REVIEW_FILE);
   if (data === null) return [];
   if (Array.isArray(data)) return data as Article[];
-  throw new Error(`${NEEDS_REVIEW_FILE} exists but is not a JSON array; aborting`);
+  throw new Error(
+    `${NEEDS_REVIEW_FILE} exists but is not a JSON array; aborting`,
+  );
 }
 
 /**
  * Overwrites the maintained failures index (`/needs-review.json`) at the root.
  */
-export async function writeFailuresIndex(
-  entries: Article[],
-): Promise<void> {
+export async function writeFailuresIndex(entries: Article[]): Promise<void> {
   await writeFile(null, NEEDS_REVIEW_FILE, entries);
 }

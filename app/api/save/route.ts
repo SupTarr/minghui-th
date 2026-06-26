@@ -5,7 +5,8 @@ import { authorize } from "@/lib/auth";
 import { isValidArticleDate, isHttpUrl } from "@/lib/apiValidation";
 import {
   toStoredRecord,
-  type ValidationResult,
+  isValidationResult,
+  isStoredValidation,
   type StoredValidation,
 } from "@/lib/contentValidation";
 
@@ -43,7 +44,9 @@ export async function POST(req: Request) {
     // empty we leave category undefined (omitted below) rather than mislabeling an
     // unknown article as a real section like "Cultivation".
     const articleCategory =
-      typeof category === "string" && category.length > 0 ? category : undefined;
+      typeof category === "string" && category.length > 0
+        ? category
+        : undefined;
     const articleSubcategory =
       typeof subcategory === "string" && subcategory.length > 0
         ? subcategory
@@ -94,16 +97,16 @@ export async function POST(req: Request) {
 
     // Slim the validation to its persisted, text-free shape. /api/translate sends
     // the full in-memory result (has `checks`); a manual re-save may send an
-    // already-slim record (has `failures`) — pass that through unchanged.
-    const rawValidation =
-      validation && typeof validation === "object"
-        ? (validation as Record<string, unknown>)
-        : null;
-    const storedValidation: StoredValidation | undefined = rawValidation
-      ? Array.isArray(rawValidation.checks)
-        ? toStoredRecord(rawValidation as unknown as ValidationResult)
-        : (rawValidation as unknown as StoredValidation)
-      : undefined;
+    // already-slim record (has `failures`) — pass that through unchanged. Anything
+    // else (missing/malformed) drops to undefined. The guards narrow the untrusted
+    // body directly, so no `as unknown as` cast is needed.
+    const storedValidation: StoredValidation | undefined = isValidationResult(
+      validation,
+    )
+      ? toStoredRecord(validation)
+      : isStoredValidation(validation)
+        ? validation
+        : undefined;
 
     const articlePayload: ArticleDetails = {
       url,

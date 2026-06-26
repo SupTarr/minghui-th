@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { toYMD } from "@/lib/date";
 
 interface DateRangePickerProps {
   startDate: string;
@@ -79,13 +80,6 @@ export default function DateRangePicker({
 
   const daysOfWeek = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 
-  function formatDateToString(date: Date) {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const dd = String(date.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
   function formatThaiDateShort(dateStr: string) {
     if (!dateStr) return "ทั้งหมด (กรองตามวันที่)";
     const [y, m, d] = dateStr.split("-");
@@ -134,7 +128,7 @@ export default function DateRangePicker({
       const prevDate = new Date(year, month - 1, prevDay);
       days.push({
         day: prevDay,
-        dateStr: formatDateToString(prevDate),
+        dateStr: toYMD(prevDate),
         isCurrentMonth: false,
       });
     }
@@ -143,7 +137,7 @@ export default function DateRangePicker({
       const currentDate = new Date(year, month, i);
       days.push({
         day: i,
-        dateStr: formatDateToString(currentDate),
+        dateStr: toYMD(currentDate),
         isCurrentMonth: true,
       });
     }
@@ -154,7 +148,7 @@ export default function DateRangePicker({
       const nextDate = new Date(year, month + 1, i);
       days.push({
         day: i,
-        dateStr: formatDateToString(nextDate),
+        dateStr: toYMD(nextDate),
         isCurrentMonth: false,
       });
     }
@@ -343,7 +337,7 @@ export default function DateRangePicker({
                 endDate &&
                 item.dateStr > startDate &&
                 item.dateStr < endDate;
-              const isTod = formatDateToString(new Date()) === item.dateStr;
+              const isTod = toYMD(new Date()) === item.dateStr;
               const isDisabled =
                 startDate &&
                 !endDate &&
@@ -387,8 +381,8 @@ export default function DateRangePicker({
                 // 7 inclusive days (today-6 … today) to match the server's
                 // MAX_DAYS=7 cap; today-7 would be 8 days and drop the oldest.
                 past.setDate(today.getDate() - 6);
-                setStartDate(formatDateToString(past));
-                setEndDate(formatDateToString(today));
+                setStartDate(toYMD(past));
+                setEndDate(toYMD(today));
                 setShowCalendar(false);
               }}
               className="text-teal-400 hover:text-teal-300 transition-colors cursor-pointer"

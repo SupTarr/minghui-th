@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { isAuthorized } from "@/lib/auth";
-import { POST as scrapePOST, type ScrapedArticle } from "@/app/api/scrape/route";
+import { POST as scrapePOST } from "@/app/api/scrape/route";
 import { POST as translatePOST } from "@/app/api/translate/route";
 import { POST as savePOST } from "@/app/api/save/route";
 import { POST as indexPOST } from "@/app/api/index/route";
+import type { ScrapedArticle, Article } from "@/lib/gdrive";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ const TIME_BUDGET_MS = 190_000;
 // finishes (with its index write) before the 300s cap.
 const ARTICLE_TIMEOUT_MS = 85_000;
 
-type ArticleResult = { url: string; filePath: string; entry: unknown };
+type ArticleResult = { url: string; filePath: string; entry: Article };
 
 function withTimeout<T>(
   promise: Promise<T>,
