@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isAllowedArticleUrl,
+  isMinghuiSiteUrl,
   isValidArticleDate,
   isHttpUrl,
   parseTranslationResponse,
@@ -49,6 +50,32 @@ describe("isAllowedArticleUrl (SSRF guard)", () => {
     expect(isAllowedArticleUrl(null)).toBe(false);
     expect(isAllowedArticleUrl(undefined)).toBe(false);
     expect(isAllowedArticleUrl(42)).toBe(false);
+  });
+});
+
+describe("isMinghuiSiteUrl (redirect-target guard, subdomain-tolerant)", () => {
+  it("accepts the exact host and any minghui.org subdomain over https", () => {
+    expect(isMinghuiSiteUrl("https://en.minghui.org/x/1.html")).toBe(true);
+    expect(isMinghuiSiteUrl("https://www.minghui.org/x")).toBe(true);
+    expect(isMinghuiSiteUrl("https://minghui.org/x")).toBe(true);
+  });
+
+  it("rejects http (non-https)", () => {
+    expect(isMinghuiSiteUrl("http://en.minghui.org/x")).toBe(false);
+  });
+
+  it("rejects off-site hosts and look-alike suffix tricks", () => {
+    expect(isMinghuiSiteUrl("https://evil.com/x")).toBe(false);
+    expect(isMinghuiSiteUrl("https://minghui.org.evil.com/x")).toBe(false);
+    expect(isMinghuiSiteUrl("https://evilminghui.org/x")).toBe(false);
+    expect(isMinghuiSiteUrl("https://169.254.169.254/")).toBe(false);
+  });
+
+  it("rejects malformed, empty, and non-strings", () => {
+    expect(isMinghuiSiteUrl("not a url")).toBe(false);
+    expect(isMinghuiSiteUrl("")).toBe(false);
+    expect(isMinghuiSiteUrl(null)).toBe(false);
+    expect(isMinghuiSiteUrl(undefined)).toBe(false);
   });
 });
 

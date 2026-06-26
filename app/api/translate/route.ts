@@ -10,6 +10,7 @@ import { validateArticle } from "@/lib/contentValidation";
 import {
   ALLOWED_ARTICLE_HOST,
   isAllowedArticleUrl,
+  isMinghuiSiteUrl,
   parseTranslationResponse,
 } from "@/lib/apiValidation";
 
@@ -55,12 +56,11 @@ export async function POST(req: Request) {
     }
 
     // SSRF defense-in-depth: the host is validated pre-fetch, but fetch follows
-    // redirects, so confirm the FINAL URL stayed on the allowed host. A same-host
-    // canonicalization (e.g. http→https) still passes; an off-host hop is rejected.
-    if (!isAllowedArticleUrl(response.url)) {
-      throw new Error(
-        `Article URL redirected off ${ALLOWED_ARTICLE_HOST}: ${response.url}`,
-      );
+    // redirects, so confirm the FINAL URL stayed on the minghui.org site. A same-
+    // site canonicalization (http→https, or en.→www.) still passes; an off-site
+    // hop (to an internal/cloud-metadata host or another domain) is rejected.
+    if (!isMinghuiSiteUrl(response.url)) {
+      throw new Error(`Article URL redirected off minghui.org: ${response.url}`);
     }
 
     const html = await response.text();

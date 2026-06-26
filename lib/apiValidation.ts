@@ -25,6 +25,31 @@ export function isAllowedArticleUrl(url: unknown): boolean {
   );
 }
 
+/** The registrable minghui.org site — any subdomain — for redirect-target checks. */
+const ALLOWED_ARTICLE_SITE = "minghui.org";
+
+/**
+ * True iff `url` is an https URL anywhere on the minghui.org site (the exact
+ * registrable domain or any subdomain). Looser than {@link isAllowedArticleUrl}
+ * by design: it validates the FINAL url after `fetch` follows redirects, so a
+ * same-site canonicalization (http→https, or en.→www.) passes while an off-site
+ * hop — to an internal/cloud-metadata host or another domain — is rejected.
+ */
+export function isMinghuiSiteUrl(url: unknown): boolean {
+  if (typeof url !== "string" || url.length === 0) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  return (
+    parsed.protocol === "https:" &&
+    (parsed.hostname === ALLOWED_ARTICLE_SITE ||
+      parsed.hostname.endsWith(`.${ALLOWED_ARTICLE_SITE}`))
+  );
+}
+
 /** Stored-article date must be exactly YYYY-MM-DD — it becomes a Drive folder name. */
 export function isValidArticleDate(date: unknown): boolean {
   return typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date);
