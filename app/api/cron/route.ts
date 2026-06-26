@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthorized } from "@/lib/auth";
-import { POST as scrapePOST } from "@/app/api/scrape/route";
+import { POST as scrapePOST, type ScrapedArticle } from "@/app/api/scrape/route";
 import { POST as translatePOST } from "@/app/api/translate/route";
 import { POST as savePOST } from "@/app/api/save/route";
 import { POST as indexPOST } from "@/app/api/index/route";
@@ -37,13 +37,6 @@ const TIME_BUDGET_MS = 190_000;
 // finishes (with its index write) before the 300s cap.
 const ARTICLE_TIMEOUT_MS = 85_000;
 
-type Article = {
-  url: string;
-  title_en: string;
-  date: string;
-  category: string;
-  subcategory?: string;
-};
 type ArticleResult = { url: string; filePath: string; entry: unknown };
 
 function withTimeout<T>(
@@ -73,7 +66,7 @@ function withTimeout<T>(
 // null on any failure (logged) so one bad article never aborts its chunk.
 async function processArticle(
   origin: string,
-  article: Article,
+  article: ScrapedArticle,
   headers: Headers,
 ): Promise<ArticleResult | null> {
   try {
@@ -147,7 +140,7 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
   }
 
   const scrapeData = await scrapeRes.json();
-  const articles: Article[] = scrapeData.articles || [];
+  const articles: ScrapedArticle[] = scrapeData.articles || [];
   const processed: Array<{ url: string; filePath: string }> = [];
   let skipped = 0;
 
