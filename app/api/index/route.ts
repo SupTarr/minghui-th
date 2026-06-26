@@ -3,8 +3,10 @@ import { revalidateTag } from "next/cache";
 import {
   readDayIndex,
   writeDayIndex,
+  readFailuresIndex,
+  writeFailuresIndex,
   ARCHIVE_LIST_TAG,
-  type CatalogEntry,
+  type Article,
 } from "@/lib/gdrive";
 import { authorize } from "@/lib/auth";
 
@@ -29,7 +31,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const entries: CatalogEntry[] = Array.isArray(body?.entries)
+    const entries: Article[] = Array.isArray(body?.entries)
       ? body.entries
       : [];
 
@@ -38,7 +40,7 @@ export async function POST(req: Request) {
     }
 
     // Group incoming entries by their date so each day's index is written once.
-    const byDate = new Map<string, CatalogEntry[]>();
+    const byDate = new Map<string, Article[]>();
     for (const entry of entries) {
       if (!entry?.url || !entry?.date) continue;
       const bucket = byDate.get(entry.date);
@@ -55,6 +57,9 @@ export async function POST(req: Request) {
     let added = 0;
     const days: string[] = [];
     const failed: string[] = [];
+    // Entries that actually committed to a per-day index, so the failures index
+    // below only mirrors written data (not entries from a day whose write threw).
+    const indexedEntries: Article[] = [];
     for (const [date, dayEntries] of byDate) {
       // Isolate each day: readDayIndex throws on a corrupted (non-array) index,
       // and writes can fail transiently. Catching per day means one bad day no
@@ -63,7 +68,7 @@ export async function POST(req: Request) {
       try {
         const current = await readDayIndex(date);
 
-        const merged = new Map<string, CatalogEntry>(
+        const merged = new Map<string, Article>(
           current.map((e) => [e.url, e]),
         );
         for (const entry of dayEntries) merged.set(entry.url, entry);
@@ -71,16 +76,39 @@ export async function POST(req: Request) {
         await writeDayIndex(date, Array.from(merged.values()));
         added += dayEntries.length;
         days.push(date);
+        indexedEntries.push(...dayEntries);
       } catch (dayErr) {
         console.error(`Failed to update index for ${date}:`, dayErr);
         failed.push(date);
       }
     }
 
-    // New articles landed — expire the cached article list immediately so they
-    // show up on the next load instead of serving stale (expire:0 is the
-    // sanctioned route-handler pattern for immediate invalidation in Next 16).
-    // Article content is immutable and has its own tag, so it's left untouched.
+    // Maintain the global failures index from the committed entries: a FAILED
+    // entry is upserted, a PASS entry clears any prior failure for that url — so
+    // the "Needs review" tab reads one small file in O(1) instead of scanning
+    // every per-day index. In its own try so a hiccup here never fails the
+    // article-index write above; the backfill rebuilds this index authoritatively,
+    // so any drift self-heals. Keyed by url to match the per-day merge.
+    if (indexedEntries.length > 0) {
+      try {
+        const failures = new Map<string, Article>(
+          (await readFailuresIndex()).map((e) => [e.url, e]),
+        );
+        for (const entry of indexedEntries) {
+          if (entry.status === "FAILED") failures.set(entry.url, entry);
+          else failures.delete(entry.url);
+        }
+        await writeFailuresIndex(Array.from(failures.values()));
+      } catch (failErr) {
+        console.error("Failed to update needs-review index:", failErr);
+      }
+    }
+
+    // New articles landed — expire the cached article list (and the failures
+    // index, which shares this tag) immediately so they show up on the next load
+    // instead of serving stale (expire:0 is the sanctioned route-handler pattern
+    // for immediate invalidation in Next 16). Article content is immutable and
+    // has its own tag, so it's left untouched.
     if (days.length > 0) {
       revalidateTag(ARCHIVE_LIST_TAG, { expire: 0 });
     }

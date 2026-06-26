@@ -61,7 +61,7 @@ export default function ArchiveList({
   }
 
   return (
-    <section className="lg:col-span-6 flex flex-col space-y-4 lg:sticky lg:top-24 h-auto lg:h-[calc(100vh-140px)] min-h-[500px]">
+    <section className="lg:col-span-6 flex flex-col space-y-4 lg:sticky lg:top-24 h-auto lg:h-[calc(100vh-140px)] min-h-125">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">
@@ -128,7 +128,7 @@ export default function ArchiveList({
         className="flex-1 overflow-y-auto scrollbar-thin pr-1 space-y-3 pb-6"
       >
         {loadingInitial && activeTab === "archived" ? (
-          <div className="h-[250px] flex flex-col items-center justify-center text-slate-500 space-y-3">
+          <div className="h-62.5 flex flex-col items-center justify-center text-slate-500 space-y-3">
             <svg
               aria-hidden="true"
               className="animate-spin h-6 w-6 text-teal-500/70"
@@ -154,7 +154,7 @@ export default function ArchiveList({
             </span>
           </div>
         ) : activeTab === "archived" && archiveError ? (
-          <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-red-500/30 rounded-2xl text-slate-400 space-y-3">
+          <div className="h-50 flex flex-col items-center justify-center text-center p-6 border border-dashed border-red-500/30 rounded-2xl text-slate-400 space-y-3">
             <span className="text-xs font-sans text-red-300/90">
               โหลดคลังบทความไม่สำเร็จ — เซิร์ฟเวอร์ไม่ตอบสนอง
             </span>
@@ -167,7 +167,7 @@ export default function ArchiveList({
             </button>
           </div>
         ) : activeTab === "archived" && archivedArticles.length === 0 ? (
-          <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
+          <div className="h-50 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
             <span className="text-xs font-sans">
               {startDate
                 ? "ไม่พบบทความสำหรับช่วงวันที่ระบุ"
@@ -175,13 +175,13 @@ export default function ArchiveList({
             </span>
           </div>
         ) : activeTab === "newly-synced" && newlySynced.length === 0 ? (
-          <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
+          <div className="h-50 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
             <span className="text-xs font-sans">
               ยังไม่มีบทความที่ดึงใหม่ในเซสชันนี้
             </span>
           </div>
         ) : activeTab === "needs-review" && needsReview.length === 0 ? (
-          <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
+          <div className="h-50 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
             <span className="text-xs font-sans">
               ไม่มีบทความที่ต้องตรวจสอบในช่วงนี้ — เนื้อหาผ่านการตรวจครบถ้วน
             </span>

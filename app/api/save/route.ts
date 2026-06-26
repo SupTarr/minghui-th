@@ -38,9 +38,11 @@ export async function POST(req: Request) {
       validation,
     } = article;
     // category is the top-level section; subcategory is the leaf. Both arrive
-    // already coalesced (breadcrumb ?? scraped) from the caller; "Cultivation"
-    // is the last-resort default when even the breadcrumb couldn't be read.
-    const articleCategory = category || "Cultivation";
+    // already coalesced (breadcrumb ?? scraped) from the caller. When even that is
+    // empty we leave category undefined (omitted below) rather than mislabeling an
+    // unknown article as a real section like "Cultivation".
+    const articleCategory =
+      typeof category === "string" && category.length > 0 ? category : undefined;
     const articleSubcategory =
       typeof subcategory === "string" && subcategory.length > 0
         ? subcategory
@@ -108,9 +110,9 @@ export async function POST(req: Request) {
       title_th,
       content_en,
       content_th,
-      category: articleCategory,
+      ...(articleCategory ? { category: articleCategory } : {}),
       ...(articleSubcategory ? { subcategory: articleSubcategory } : {}),
-      published_date: date,
+      date,
       fetched_at: new Date().toISOString(),
       // Slim, text-free validation record (optional — absent on manual saves).
       ...(storedValidation ? { validation: storedValidation } : {}),
@@ -127,7 +129,7 @@ export async function POST(req: Request) {
       title_en,
       title_th,
       date,
-      category: articleCategory,
+      ...(articleCategory ? { category: articleCategory } : {}),
       ...(articleSubcategory ? { subcategory: articleSubcategory } : {}),
       filePath: `/${folderName}/${fileName}`,
       // Mirror the validation summary onto the catalog entry so the archive list
@@ -144,7 +146,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      filePath: entry.filePath,
       entry,
     });
   } catch (error) {

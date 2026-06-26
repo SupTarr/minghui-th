@@ -1,4 +1,4 @@
-import type { StoredValidation, StoredFailure } from "../lib/contentValidation";
+import type { StoredValidation } from "../lib/contentValidation";
 
 export type {
   ValidationResult,
@@ -7,27 +7,18 @@ export type {
   StoredFailure,
 } from "../lib/contentValidation";
 
-export interface Article {
-  url: string;
-  title_en: string;
-  title_th: string;
-  date: string;
-  // Top-level Minghui section (e.g. "Cultivation"); subcategory is the leaf
-  // (e.g. "Cultivation Insights"). Both are derived from the article breadcrumb.
-  category?: string;
-  subcategory?: string;
-  filePath?: string;
-  // Set by the content validator. Lives on the lightweight catalog entry so the
-  // "Needs review" tab can filter from the per-day index without loading each
-  // article's full JSON. Message text is rendered from validation.json via
-  // renderFailures(failures) — never persisted.
-  status?: "PASS" | "FAILED";
-  failures?: StoredFailure[];
-}
+// The catalog/list-item type is defined in the storage layer (lib/gdrive) as the
+// single source of truth, and re-exported here so UI code keeps importing all its
+// types from one module. `export type` is erased at compile time, so no googleapis
+// runtime reaches the client bundle.
+export type { Article } from "../lib/gdrive";
 
 export interface ArticleDetails {
-  published_date: string;
-  category: string;
+  // The article's publish date (YYYY-MM-DD).
+  date: string;
+  // Optional: a missing breadcrumb leaves category unset rather than defaulting to
+  // a real section, so the reader simply omits the badge.
+  category?: string;
   subcategory?: string;
   url: string;
   title_th: string;

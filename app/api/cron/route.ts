@@ -118,7 +118,7 @@ async function processArticle(
     const saveResult = await saveRes.json();
     return {
       url: article.url,
-      filePath: saveResult.filePath,
+      filePath: saveResult.entry?.filePath,
       entry: saveResult.entry,
     };
   } catch (articleError) {

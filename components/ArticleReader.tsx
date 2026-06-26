@@ -382,7 +382,7 @@ export default function ArticleReader({
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02] select-none">
           <svg
             aria-hidden="true"
-            className="w-[500px] h-[500px]"
+            className="w-125 h-125"
             viewBox="0 0 100 100"
             fill="none"
             stroke="currentColor"
@@ -426,11 +426,13 @@ export default function ArticleReader({
             <div className="border-b border-slate-900/60 pb-6 space-y-4 font-sans">
               <div className="flex flex-wrap items-center gap-2 text-3xs font-mono font-semibold">
                 <span className="bg-amber-500/10 text-amber-400 px-2.5 py-0.5 rounded-md border border-amber-500/15">
-                  {articleContent.published_date}
+                  {articleContent.date}
                 </span>
-                <span className="bg-indigo-500/10 text-indigo-400 px-2.5 py-0.5 rounded-md border border-indigo-500/15">
-                  {articleContent.category}
-                </span>
+                {articleContent.category && (
+                  <span className="bg-indigo-500/10 text-indigo-400 px-2.5 py-0.5 rounded-md border border-indigo-500/15">
+                    {articleContent.category}
+                  </span>
+                )}
                 {articleContent.subcategory && (
                   <span className="bg-teal-500/10 text-teal-400 px-2.5 py-0.5 rounded-md border border-teal-500/15">
                     {articleContent.subcategory}

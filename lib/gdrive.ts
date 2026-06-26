@@ -447,7 +447,7 @@ export async function readFileAtPath(filePath: string): Promise<unknown> {
 /**
  * A single article's entry in the lightweight catalog (per-day index).
  */
-export interface CatalogEntry {
+export interface Article {
   url: string;
   title_en: string;
   title_th: string;
@@ -471,10 +471,10 @@ export interface CatalogEntry {
  * not synced). Throws if the file exists but is not a JSON array, so callers can
  * abort instead of overwriting a corrupted index with partial data.
  */
-export async function readDayIndex(date: string): Promise<CatalogEntry[]> {
+export async function readDayIndex(date: string): Promise<Article[]> {
   const data = await readFileAtPath(`/${date}/index.json`);
   if (data === null) return [];
-  if (Array.isArray(data)) return data as CatalogEntry[];
+  if (Array.isArray(data)) return data as Article[];
   throw new Error(
     `Day index ${date}/index.json exists but is not a JSON array; aborting`,
   );
@@ -486,7 +486,39 @@ export async function readDayIndex(date: string): Promise<CatalogEntry[]> {
  */
 export async function writeDayIndex(
   date: string,
-  entries: CatalogEntry[],
+  entries: Article[],
 ): Promise<void> {
   await writeFile(date, "index.json", entries);
+}
+
+// The maintained catalog of every article the validator currently flags FAILED,
+// kept as one small root-level file so the "Needs review" tab reads it in O(1)
+// instead of scanning every per-day index (which would grow with the archive).
+// Failures are rare, so the file stays tiny. It's updated on write (see
+// /api/index) and rebuilt authoritatively by scripts/backfill-validation.mts, so
+// any drift self-heals on the next backfill — matching the per-day index's
+// best-effort-write + reconcile model.
+export const NEEDS_REVIEW_FILE = "needs-review.json";
+
+/**
+ * Reads the maintained failures index (`/needs-review.json`).
+ *
+ * Returns [] when the file doesn't exist yet (nothing flagged, or it hasn't been
+ * built). Throws if the file exists but isn't a JSON array, so a corrupted index
+ * aborts instead of being silently overwritten with partial data.
+ */
+export async function readFailuresIndex(): Promise<Article[]> {
+  const data = await readFile(NEEDS_REVIEW_FILE);
+  if (data === null) return [];
+  if (Array.isArray(data)) return data as Article[];
+  throw new Error(`${NEEDS_REVIEW_FILE} exists but is not a JSON array; aborting`);
+}
+
+/**
+ * Overwrites the maintained failures index (`/needs-review.json`) at the root.
+ */
+export async function writeFailuresIndex(
+  entries: Article[],
+): Promise<void> {
+  await writeFile(null, NEEDS_REVIEW_FILE, entries);
 }
