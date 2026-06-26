@@ -445,9 +445,12 @@ export async function readFileAtPath(filePath: string): Promise<unknown> {
 }
 
 /**
- * A single article's entry in the lightweight catalog (per-day index).
+ * Fields shared by every article shape across the pipeline — the scraped listing
+ * item, the catalog entry, and the full stored record. Declared once here so the
+ * catalog `Article` and the reader `ArticleDetails` (components/types) extend it
+ * instead of re-declaring the same fields and drifting apart.
  */
-export interface Article {
+export interface ArticleCore {
   url: string;
   title_en: string;
   title_th: string;
@@ -455,6 +458,12 @@ export interface Article {
   // category = top-level Minghui section; subcategory = leaf (breadcrumb-derived).
   category?: string;
   subcategory?: string;
+}
+
+/**
+ * A single article's entry in the lightweight catalog (per-day index).
+ */
+export interface Article extends ArticleCore {
   filePath: string;
   // Content-validation summary. Kept on the entry so the archive list /
   // "Needs review" tab can filter + render straight from the per-day index

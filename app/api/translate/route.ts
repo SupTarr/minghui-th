@@ -44,11 +44,22 @@ export async function POST(req: Request) {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       },
+      // Bound a hung upstream so one slow fetch can't pin the serverless invocation.
+      signal: AbortSignal.timeout(20_000),
     });
 
     if (!response.ok) {
       throw new Error(
         `Failed to fetch article page: status ${response.status}`,
+      );
+    }
+
+    // SSRF defense-in-depth: the host is validated pre-fetch, but fetch follows
+    // redirects, so confirm the FINAL URL stayed on the allowed host. A same-host
+    // canonicalization (e.g. http→https) still passes; an off-host hop is rejected.
+    if (!isAllowedArticleUrl(response.url)) {
+      throw new Error(
+        `Article URL redirected off ${ALLOWED_ARTICLE_HOST}: ${response.url}`,
       );
     }
 

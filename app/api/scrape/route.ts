@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 import { readDayIndex } from "@/lib/gdrive";
 import { authorize } from "@/lib/auth";
+import { parseArticleDateFromUrl, parseDateText } from "@/lib/date";
 
 // Mark route as dynamic to ensure it doesn't get cached at build time
 export const dynamic = "force-dynamic";
@@ -19,38 +20,6 @@ export interface ScrapedArticle {
   date: string;
   category: string;
   subcategory?: string;
-}
-
-function parseDateFromUrl(href: string): string | null {
-  // Pattern: /html/articles/YYYY/M/D/ID.html
-  const match = href.match(
-    /\/articles\/(\d{4})\/(\d{1,2})\/(\d{1,2})\/\d+\.html/,
-  );
-  if (match) {
-    const yyyy = match[1];
-    const mm = match[2].padStart(2, "0");
-    const dd = match[3].padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
-  return null;
-}
-
-function parseDateText(dateStr: string): string | null {
-  try {
-    const clean = dateStr.replace(/\s+/g, " ").trim();
-    const dateObj = new Date(clean);
-    if (!isNaN(dateObj.getTime())) {
-      const yyyy = dateObj.getFullYear();
-      const mm = String(dateObj.getMonth() + 1).padStart(2, "0");
-      const dd = String(dateObj.getDate()).padStart(2, "0");
-      return `${yyyy}-${mm}-${dd}`;
-    }
-  } catch (e) {
-    console.error("Error parsing date text:", dateStr, e);
-  }
-  // Return null rather than echoing the raw text back: an unparseable date must
-  // never become a Drive folder name.
-  return null;
 }
 
 export async function POST(req: Request) {
@@ -74,6 +43,8 @@ export async function POST(req: Request) {
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       },
       next: { revalidate: 0 }, // bypass next fetch cache
+      // Bound a hung upstream so the scrape can't pin the serverless invocation.
+      signal: AbortSignal.timeout(20_000),
     });
 
     if (!response.ok) {
@@ -115,7 +86,7 @@ export async function POST(req: Request) {
         pipeIdx === -1 ? undefined : metaText.slice(pipeIdx + 1).trim();
 
       // Prefer the date embedded in the URL; fall back to the listed date text.
-      let date = parseDateFromUrl(href);
+      let date = parseArticleDateFromUrl(href);
       if (!date) {
         date = parseDateText(dateText.trim());
       }

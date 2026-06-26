@@ -220,7 +220,9 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
   return { processed, skipped };
 }
 
-export async function GET(req: Request) {
+// Vercel Cron issues a GET; a manual trigger or re-run may POST. Both run the
+// identical pipeline, so they delegate to one handler instead of duplicating it.
+async function handleCron(req: Request) {
   try {
     if (!(await isAuthorized(req))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -245,27 +247,10 @@ export async function GET(req: Request) {
   }
 }
 
+export async function GET(req: Request) {
+  return handleCron(req);
+}
+
 export async function POST(req: Request) {
-  try {
-    if (!(await isAuthorized(req))) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { origin } = new URL(req.url);
-    const { processed, skipped } = await runPipeline(origin, req.headers);
-
-    return NextResponse.json({
-      success: true,
-      processedCount: processed.length,
-      skippedCount: skipped,
-      processed,
-    });
-  } catch (error) {
-    const err = error as Error;
-    console.error("Cron pipeline exception:", err);
-    return NextResponse.json(
-      { error: err.message || "Internal Server Error" },
-      { status: 500 },
-    );
-  }
+  return handleCron(req);
 }

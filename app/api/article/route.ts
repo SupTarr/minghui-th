@@ -55,8 +55,10 @@ export async function GET(req: Request) {
   } catch (error) {
     const err = error as Error;
     console.error("Error in GET /api/article:", err);
+    // Public endpoint: return a generic message (real error logged above) so
+    // internal/Drive details aren't echoed to arbitrary callers.
     return NextResponse.json(
-      { error: err.message || "Internal Server Error" },
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { writeFile } from "@/lib/gdrive";
+import { writeFile, type Article } from "@/lib/gdrive";
+import type { ArticleDetails } from "@/components/types";
 import { authorize } from "@/lib/auth";
 import { isValidArticleDate, isHttpUrl } from "@/lib/apiValidation";
 import {
@@ -104,7 +105,7 @@ export async function POST(req: Request) {
         : (rawValidation as unknown as StoredValidation)
       : undefined;
 
-    const articlePayload = {
+    const articlePayload: ArticleDetails = {
       url,
       title_en,
       title_th,
@@ -113,7 +114,6 @@ export async function POST(req: Request) {
       ...(articleCategory ? { category: articleCategory } : {}),
       ...(articleSubcategory ? { subcategory: articleSubcategory } : {}),
       date,
-      fetched_at: new Date().toISOString(),
       // Slim, text-free validation record (optional — absent on manual saves).
       ...(storedValidation ? { validation: storedValidation } : {}),
     };
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
     // 4. Return the catalog entry. The index.json isn't written here; the caller
     // posts this entry to /api/index right after the save succeeds, so each
     // article lands in its per-day index as soon as it's translated.
-    const entry = {
+    const entry: Article = {
       url,
       title_en,
       title_th,
