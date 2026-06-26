@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { isValidElement, type ReactNode } from "react";
-import { renderInline } from "./ArticleReader";
+import { renderInline, renderContent } from "./ArticleReader";
 
 // Recursively collect element tag names, anchor hrefs, and text from a
 // renderInline() React tree, so we can assert on what a reader actually sees.
@@ -119,5 +119,65 @@ describe("renderInline — opposite-type emphasis nested in bold (lazy-balanced)
     const { joined } = walk("*a **b** c*");
     expect(joined).toBe("a b c");
     expect(joined).not.toContain("*");
+  });
+});
+
+// Walks a renderContent() block tree (an array of block elements), capturing tag
+// names, the first <img>'s src/alt, and text — so we can assert on what renders.
+function collectBlocks(
+  node: ReactNode,
+  acc: { types: string[]; text: string; src: string; alt: string },
+) {
+  if (Array.isArray(node)) {
+    node.forEach((n) => collectBlocks(n, acc));
+    return;
+  }
+  if (typeof node === "string") {
+    acc.text += node;
+    return;
+  }
+  if (isValidElement(node)) {
+    const props = node.props as {
+      src?: string;
+      alt?: string;
+      children?: ReactNode;
+    };
+    const t = typeof node.type === "string" ? node.type : "component";
+    acc.types.push(t);
+    if (t === "img") {
+      if (props.src) acc.src = props.src;
+      acc.alt = props.alt ?? "";
+    }
+    collectBlocks(props.children, acc);
+  }
+}
+
+describe("renderContent — image blocks", () => {
+  it("renders ![alt](url) as a figure with an img and a figcaption", () => {
+    const acc = { types: [] as string[], text: "", src: "", alt: "" };
+    collectBlocks(
+      renderContent(
+        "![A caption](https://en.minghui.org/u/article_images/a.jpg)",
+        "en",
+      ),
+      acc,
+    );
+    expect(acc.types).toEqual(
+      expect.arrayContaining(["figure", "img", "figcaption"]),
+    );
+    expect(acc.src).toBe("https://en.minghui.org/u/article_images/a.jpg");
+    expect(acc.alt).toBe("A caption");
+    expect(acc.text).toContain("A caption");
+  });
+
+  it("renders an empty-alt image without a figcaption", () => {
+    const acc = { types: [] as string[], text: "", src: "", alt: "" };
+    collectBlocks(
+      renderContent("![](https://en.minghui.org/u/article_images/b.jpg)", "en"),
+      acc,
+    );
+    expect(acc.types).toContain("img");
+    expect(acc.types).not.toContain("figcaption");
+    expect(acc.src).toBe("https://en.minghui.org/u/article_images/b.jpg");
   });
 });

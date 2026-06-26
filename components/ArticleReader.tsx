@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import type { ArticleDetails } from "@/components/types";
-import { createInlineRegex } from "../lib/contentValidation";
+import { createInlineRegex, matchImageBlock } from "../lib/contentValidation";
 
 // Parses inline markdown — **bold**, *italic*, [text](url) — plus \n line breaks
 // within a block, returning React nodes. The block-level parser (renderContent)
@@ -58,9 +58,9 @@ export function renderInline(text: string): ReactNode[] {
   return out;
 }
 
-// Parses markdown structures (headings, blockquotes, bullet lists, code blocks)
-// and renders styled elements.
-function renderContent(content: string, lang: "th" | "en") {
+// Parses markdown structures (headings, blockquotes, bullet lists, code blocks,
+// images) and renders styled elements. Exported for focused tests, like renderInline.
+export function renderContent(content: string, lang: "th" | "en") {
   return content.split("\n\n").map((para, idx) => {
     if (para.startsWith("# ")) {
       return (
@@ -146,6 +146,36 @@ function renderContent(content: string, lang: "th" | "en") {
 
     if (/^-{3,}$/.test(para.trim())) {
       return <hr key={idx} className="my-8 border-t border-slate-800/70" />;
+    }
+
+    // A standalone image block: ![alt](url). Uses the same matcher the validator
+    // classifies with, so "what renders" == "what is validated". Hotlinked from
+    // Minghui; onError hides a broken image so it degrades to caption-only.
+    const image = matchImageBlock(para);
+    if (image) {
+      const [, alt, src] = image;
+      return (
+        <figure key={idx} className="my-8">
+          {/* eslint-disable-next-line @next/next/no-img-element -- remote Minghui
+              image of unknown dimensions; next/image would need width/height plus a
+              remotePatterns allowlist we intentionally skip for a simple hotlink. */}
+          <img
+            src={src}
+            alt={alt}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+            className="mx-auto max-w-full h-auto rounded-xl border border-slate-900/60"
+          />
+          {alt && (
+            <figcaption className="mt-3 text-center text-xs italic text-slate-400 font-sans">
+              {alt}
+            </figcaption>
+          )}
+        </figure>
+      );
     }
 
     return (

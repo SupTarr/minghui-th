@@ -270,6 +270,67 @@ describe("parseArticleHtml — quote merging and dividers", () => {
   });
 });
 
+describe("parseArticleHtml — images", () => {
+  it("emits a single image with its caption as the alt (→ figcaption)", () => {
+    const { content_en } = parseArticleHtml(
+      wrap(
+        `<p class="splitted image-container">
+          <span class="section"><a href="/u/article_images/2026-5-11-x-0.jpg"><img src="/u/article_images/hashA.jpg" style="width:500px;"/></a></span>
+          <span class="section">A single caption here. (Minghui.org)</span>
+        </p>`,
+      ),
+    );
+    expect(content_en).toContain(
+      "![A single caption here. (Minghui.org)](https://en.minghui.org/u/article_images/hashA.jpg)",
+    );
+  });
+
+  it("emits each image alt-less plus one italic caption when a container has several", () => {
+    const { content_en } = parseArticleHtml(
+      wrap(
+        `<p class="splitted image-container">
+          <span class="section"><a href="/u/article_images/x-0.jpg"><img src="/u/article_images/hash1.jpg" style="width:500px;"/></a></span>
+          <span class="section"><a href="/u/article_images/x-1.jpg"><img src="/u/article_images/hash2.jpg"/></a></span>
+          <span class="section">Two images caption here. (Minghui.org)</span>
+        </p>`,
+      ),
+    );
+    expect(content_en).toContain(
+      "![](https://en.minghui.org/u/article_images/hash1.jpg)",
+    );
+    expect(content_en).toContain(
+      "![](https://en.minghui.org/u/article_images/hash2.jpg)",
+    );
+    expect(content_en).toContain("*Two images caption here. (Minghui.org)*");
+  });
+
+  it("emits a bare image when the container has no caption (regression: image not dropped)", () => {
+    const { content_en } = parseArticleHtml(
+      wrap(
+        `<p class="splitted image-container">
+          <span class="section"><a href="/u/article_images/x-0.jpg"><img src="/u/article_images/solo.jpg" style="width:500px;"/></a></span>
+        </p>`,
+      ),
+    );
+    expect(content_en).toContain(
+      "![](https://en.minghui.org/u/article_images/solo.jpg)",
+    );
+  });
+
+  it("drops an unresolvable image src and keeps the caption italic", () => {
+    const { content_en } = parseArticleHtml(
+      wrap(
+        `<p class="splitted image-container">
+          <span class="section"><img src="relative-no-slash.jpg"/></span>
+          <span class="section">Caption with bad image. (Minghui.org)</span>
+        </p>`,
+      ),
+    );
+    expect(content_en).not.toContain("![");
+    expect(content_en).toContain("*Caption with bad image. (Minghui.org)*");
+  });
+});
+
 describe("parseBreadcrumb", () => {
   const bc = (inner: string) =>
     `<html><body><div class="bread-crumb">${inner}</div></body></html>`;

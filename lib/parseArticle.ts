@@ -77,6 +77,33 @@ function stripInlineMarkers(s: string): string {
   return s.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\*+/g, "");
 }
 
+/**
+ * Caption text fit for an image's alt slot in `![alt](url)`: drop inline markers
+ * (the caption is styled by the renderer, not re-emphasised) and any character that
+ * would break the block shape — `[`, `]`, and newlines — collapsing whitespace.
+ */
+function sanitizeAlt(s: string): string {
+  return stripInlineMarkers(s)
+    .replace(/[[\]]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Wrap an image caption as italic context, one `*…*` per line. Minghui already
+ * styles the caption with emphasis, so strip inner markers first (an inner *title*
+ * would otherwise collide into a malformed `*… *title**`). Returns "" when nothing
+ * survives. Shared by the caption-only and multi-image container paths.
+ */
+function italicizeCaption(caption: string): string {
+  return caption
+    .split("\n")
+    .map((line) => stripInlineMarkers(line).trim())
+    .filter(Boolean)
+    .map((line) => `*${line}*`)
+    .join("\n");
+}
+
 /** Absolute http(s) URL for a link, or null for tooltip/anchor/scheme-only hrefs. */
 function resolveHref(href: string | undefined): string | null {
   const h = href?.trim();
@@ -245,7 +272,10 @@ export function parseArticleHtml(html: string): ParsedArticle {
     // (A blanket "splitted && !quote" skip silently ate real body paragraphs.)
     const splittedRoot = element.closest(".splitted");
     const isSplitted = splittedRoot.length > 0;
-    const isCaption = isSplitted && splittedRoot.hasClass("image-container");
+    // An image container holds zero-or-more <img> plus a caption. Detected by its
+    // own class (not via `splitted`) so a non-splitted image-container still counts.
+    const imageRoot = element.closest(".image-container");
+    const isCaption = imageRoot.length > 0;
     const isSplittedQuote = isSplitted && splittedRoot.hasClass("quote");
     if (isSplitted && !isCaption && !isSplittedQuote) {
       // The metadata footer is a single short line; real body paragraphs that
@@ -257,6 +287,35 @@ export function parseArticleHtml(html: string): ParsedArticle {
 
     // Avoid duplicating text when a matched ancestor already covers this node.
     if (element.parent().closest(BLOCK_SELECTOR).length > 0) return;
+
+    // Image container: emit each <img> as a standalone markdown image block, plus
+    // its caption. Handled before the empty-text guard below because an image-only
+    // container has no caption text and would otherwise be dropped there. <img> srcs
+    // are relative (/u/article_images/…); resolveHref makes them absolute and nulls
+    // out anything unusable (empty/data:/#/relative-without-slash).
+    if (isCaption) {
+      const caption = blockText($, el); // image <span>s serialize empty → caption only
+      const srcs = imageRoot
+        .find("img")
+        .toArray()
+        .map((img) => resolveHref($(img).attr("src")))
+        .filter((s): s is string => Boolean(s));
+      if (srcs.length === 1) {
+        // Single image: the caption becomes its alt → renderer shows a <figcaption>.
+        blocks.push({
+          text: `![${sanitizeAlt(caption)}](${srcs[0]})`,
+          isQuote: false,
+        });
+      } else {
+        // Many images share one caption (alt-less images, then the caption once); or
+        // zero usable images (caption-only / unresolvable src) — keep the caption as
+        // italic context, exactly as before. The loop is empty when srcs is empty.
+        for (const src of srcs) blocks.push({ text: `![](${src})`, isQuote: false });
+        const cap = italicizeCaption(caption);
+        if (cap) blocks.push({ text: cap, isQuote: false });
+      }
+      return;
+    }
 
     let text = blockText($, el);
     if (!text) return;
@@ -299,17 +358,6 @@ export function parseArticleHtml(html: string): ParsedArticle {
       text = text
         .split("\n")
         .map((line) => `> ${line}`)
-        .join("\n");
-    } else if (isCaption) {
-      // The image can't survive into a text translation; keep its caption as
-      // italic context. The whole line is already italic, so strip any inner
-      // emphasis (an inner *title* would collide into malformed `*… *title**`);
-      // wrap once per line.
-      text = text
-        .split("\n")
-        .map((line) => stripInlineMarkers(line).trim())
-        .filter(Boolean)
-        .map((line) => `*${line}*`)
         .join("\n");
     } else if (tagName === "li") {
       text = `- ${text}`;

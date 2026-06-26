@@ -78,6 +78,7 @@ const EXPECTED_RULE_IDS = [
   "th_translated",
   "link_set",
   "link_count",
+  "image_set",
   "markdown_balance",
   "heading_skeleton",
   "th_untranslated_block",
@@ -172,6 +173,7 @@ export type BlockType =
   | "list"
   | "code"
   | "hr"
+  | "image"
   | "p";
 
 export type InlineKind = "bold" | "italic" | "bolditalic" | "link";
@@ -205,6 +207,23 @@ export const INLINE_MD_PATTERN =
 
 export function createInlineRegex(): RegExp {
   return new RegExp(INLINE_MD_PATTERN, "g");
+}
+
+// A whole block that is a single markdown image: ![alt](http-url). Images are
+// block-level (Minghui images are standalone figures), so this is detected by
+// classifyBlock and rendered by renderContent — deliberately NOT an inline kind,
+// which keeps the image URL out of the link/emphasis regex above (the `[alt](url)`
+// substring would otherwise be miscounted as a link). `[^\]]*` allows an EMPTY alt
+// (multi-image containers attach their one caption to a sibling block, leaving the
+// images alt-less). Exported so the renderer and the validator share ONE matcher —
+// the same "what validates == what renders" guarantee createInlineRegex provides.
+// No /g flag, so a single module-level compiled regex is safe to reuse.
+export const IMAGE_BLOCK_PATTERN = "^!\\[([^\\]]*)\\]\\((https?:\\/\\/[^)\\s]+)\\)$";
+const IMAGE_BLOCK_RE = new RegExp(IMAGE_BLOCK_PATTERN);
+
+/** Match a trimmed block against IMAGE_BLOCK_PATTERN; m[1] = alt, m[2] = url. */
+export function matchImageBlock(block: string): RegExpMatchArray | null {
+  return block.trim().match(IMAGE_BLOCK_RE);
 }
 
 /**
@@ -248,6 +267,7 @@ function classifyBlock(para: string): BlockType {
   if (para.startsWith("> ")) return "quote";
   if (para.startsWith("- ")) return "list";
   if (para.startsWith("```")) return "code";
+  if (matchImageBlock(para)) return "image";
   if (/^-{3,}$/.test(para.trim())) return "hr";
   return "p";
 }
@@ -274,6 +294,13 @@ function blockInlineText(para: string, type: BlockType): string | null {
       return para.replace(/^>\s?/gm, "");
     case "list":
       return para.replace(/^-\s+/, "");
+    case "image": {
+      // Caption (alt) only — never the full ![..](url), so the shared inline regex
+      // can't miscount the image URL as a link. The caption still counts toward the
+      // Thai-ratio / length checks; the URL is guarded separately by image_set.
+      const m = matchImageBlock(para);
+      return m ? m[1] : "";
+    }
     case "code":
     case "hr":
       return null;
@@ -330,6 +357,21 @@ function collectLinks(md: string): string[] {
       if (inline.kind === "link" && inline.url) urls.push(inline.url);
     }
   }
+  return urls;
+}
+
+/**
+ * Every image-block URL occurrence (a multiset, document order). The shared inline
+ * regex deliberately never sees image URLs (image blocks are alt-only there), so
+ * this is their dedicated collector — the image_set analogue of collectLinks.
+ */
+function collectImages(md: string): string[] {
+  const urls: string[] = [];
+  eachBlock(md, (type, _inlineText, raw) => {
+    if (type !== "image") return;
+    const m = matchImageBlock(raw);
+    if (m) urls.push(m[2]);
+  });
   return urls;
 }
 
@@ -558,6 +600,27 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
     countOk,
     undefined,
     countOk ? undefined : { enCount: enLinks.length, thCount: thLinks.length },
+  );
+
+  // 5b. image_set — every DISTINCT image URL in EN must be present in TH and
+  //     vice-versa. Image URLs, like link destinations, are never translated, so a
+  //     dropped/added/mutated one is corruption. The shared inline regex never sees
+  //     image URLs (image blocks are alt-only there), so this is their own guard —
+  //     the link_set analogue for `![alt](url)` blocks.
+  const enImages = collectImages(en);
+  const thImages = collectImages(th);
+  const enImgSet = new Set(enImages);
+  const thImgSet = new Set(thImages);
+  const imgMissing = [...enImgSet].filter((u) => !thImgSet.has(u));
+  const imgExtra = [...thImgSet].filter((u) => !enImgSet.has(u));
+  const imagesOk = imgMissing.length === 0 && imgExtra.length === 0;
+  add(
+    "image_set",
+    imagesOk,
+    undefined,
+    imagesOk
+      ? undefined
+      : { missingCount: imgMissing.length, extraCount: imgExtra.length },
   );
 
   // 6. markdown_balance — DIFFERENTIAL: flag only orphan markers / unrenderable
