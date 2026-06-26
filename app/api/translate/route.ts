@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { authorize } from "@/lib/auth";
 import {
   parseArticleHtml,
@@ -94,6 +94,22 @@ export async function POST(req: Request) {
       model: "gemini-2.5-flash",
       generationConfig: {
         responseMimeType: "application/json",
+        // responseMimeType alone guarantees valid JSON but NOT its shape: on long
+        // articles the model segments the body and emits one `content_th` key per
+        // markdown block. Duplicate keys are valid JSON, so JSON.parse keeps only
+        // the last — the whole body collapses to the final paragraph. A schema
+        // makes a second `content_th` key structurally impossible.
+        responseSchema: {
+          type: SchemaType.OBJECT,
+          properties: {
+            title_th: { type: SchemaType.STRING },
+            content_th: { type: SchemaType.STRING },
+          },
+          required: ["title_th", "content_th"],
+        },
+        // gemini-2.5-flash spends thinking tokens against the output budget; a
+        // generous cap keeps a long Thai body from being truncated mid-article.
+        maxOutputTokens: 32768,
       },
     });
 
