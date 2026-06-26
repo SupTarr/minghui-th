@@ -277,6 +277,44 @@ A short story about a practitioner and her cultivation path is told here.`;
   });
 });
 
+describe("validateArticle — severe truncation (Gemini early-STOP)", () => {
+  // gemini-2.5-flash sometimes STOPs after one sentence, returning a schema-valid
+  // but near-empty body. An article WITH images/headings trips image_set /
+  // heading_skeleton (error) so the route retries — but a PLAIN-TEXT article has
+  // neither, so before severe_truncation it tripped only warns (length_ratio,
+  // block_drift), stayed PASS, and published the stub. severe_truncation flips it
+  // to FAILED so the route's retry loop re-calls instead of silently publishing.
+  it("flags a long plain-text body truncated to one sentence (no images/headings)", () => {
+    const longEn = Array.from(
+      { length: 12 },
+      (_, i) =>
+        `This is paragraph ${i + 1} of a long article about a practitioner and her cultivation journey, with many details kept for the reader.`,
+    ).join("\n\n");
+    const r = validateArticle({
+      title_en: "A Long Story",
+      title_th: "เรื่องราวอันยาวนาน",
+      content_en: longEn,
+      content_th: "นี่คือย่อหน้าแรกเท่านั้นที่ถูกแปลก่อนจะหยุด",
+    });
+    expect(r.status).toBe("FAILED");
+    expect(failed("severe_truncation", r)?.severity).toBe("error");
+    // Nothing else error-level catches it — severe_truncation is the flip to FAILED.
+    expect(failed("image_set", r)).toBeFalsy();
+    expect(failed("heading_skeleton", r)).toBeFalsy();
+    expect(failed("th_translated", r)).toBeFalsy();
+  });
+
+  it("does NOT flag a short but faithful translation (ratio above the floor)", () => {
+    const r = validateArticle({
+      title_en: "Note",
+      title_th: "บันทึก",
+      content_en: "A practitioner shares a brief reflection on her cultivation.",
+      content_th: "ผู้ฝึกคนหนึ่งแบ่งปันข้อคิดสั้นๆ เกี่ยวกับการบำเพ็ญของเธอ",
+    });
+    expect(failed("severe_truncation", r)).toBeFalsy();
+  });
+});
+
 describe("validateArticle — warnings keep status PASS", () => {
   it("a consolidated duplicate URL is a warn (link_count), not an error", () => {
     const r = validateArticle({
