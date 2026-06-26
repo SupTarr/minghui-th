@@ -29,47 +29,129 @@
 //     all inline analysis is per-block, on the same stripped text, and recurses
 //     into matches the way renderInline does.
 
-export const VALIDATOR_VERSION = 2;
+import {
+  CONFIG,
+  CONFIG_VERSION,
+  renderFailures,
+  type StoredFailure,
+} from "./validationMessages.ts";
 
-// Tunable thresholds. These are starting points; the dry-run backfill sweep over
-// the real corpus is used to calibrate the warn-level ones before enforcing.
-const THAI_RATIO_MIN = 0.4; // min Thai-share of letters in content_th (whole body)
-const THAI_RATIO_MIN_LETTERS = 12; // don't judge the whole-body ratio on a near-empty body
-const BLOCK_UNTRANSLATED_MIN_LETTERS = 40; // a block must be this substantial to judge
-const BLOCK_THAI_MIN = 0.15; // below this Thai-share, a substantial block looks untranslated
-const LEN_RATIO_MIN = 0.3; // content_th / content_en plain-text char ratio band
-const LEN_RATIO_MAX = 3.0;
-const COMPLETENESS_MIN = 0.6; // parsed-EN / source-body text ratio floor
-const MAX_CONTENT_CHARS = 100_000; // beyond this, content is abnormal — skip heavy regex
-const PATHOLOGICAL_RUN = /[[*]{200,}/; // 200+ consecutive [ or * → corrupt; avoids O(n^2) regex
+// Re-exported for the backfill CLI's version gate. The rule registry —
+// thresholds, severity, and message text — is the repo-root validation.json
+// (the single source of truth); this module holds only the check LOGIC.
+export { CONFIG_VERSION };
+export type { StoredFailure } from "./validationMessages.ts";
+
+// Tunable thresholds, all sourced from validation.json. These consts feed the
+// CHECK LOGIC below; the message text and its threshold interpolation come from
+// the same registry via renderMessage, so nothing is duplicated.
+const param = (id: string, key: string): number =>
+  CONFIG.rules[id].params![key] as number;
+const THAI_RATIO_MIN = param("th_translated", "thaiRatioMin"); // min Thai-share of letters in content_th
+const THAI_RATIO_MIN_LETTERS = param("th_translated", "thaiRatioMinLetters"); // don't judge ratio on a near-empty body
+const BLOCK_UNTRANSLATED_MIN_LETTERS = param(
+  "th_untranslated_block",
+  "blockUntranslatedMinLetters",
+); // a block must be this substantial to judge
+const BLOCK_THAI_MIN = param("th_untranslated_block", "blockThaiMin"); // below this Thai-share, a block looks untranslated
+const LEN_RATIO_MIN = param("length_ratio", "lenRatioMin"); // content_th / content_en plain-text char ratio band
+const LEN_RATIO_MAX = param("length_ratio", "lenRatioMax");
+const COMPLETENESS_MIN = param("parser_completeness", "completenessMin"); // parsed-EN / source-body text ratio floor
+const MAX_CONTENT_CHARS = param("content_sane", "maxContentChars"); // beyond this, content is abnormal — skip heavy regex
 // A *consecutive*-run guard can't catch SPARSE adversarial markers ("[a[a[a…"),
 // which still drive the link/emphasis regex into O(n^2) backtracking. Cap the
 // TOTAL [/* count too (a linear char-class scan, no backtracking). Legitimate
 // articles carry well under this; thousands of unbalanced markers are corrupt.
-const MAX_INLINE_MARKERS = 4000;
+const MAX_INLINE_MARKERS = param("content_sane", "maxInlineMarkers");
+const PATHOLOGICAL_RUN = new RegExp(
+  CONFIG.rules.content_sane.params!.pathologicalPattern as string,
+  CONFIG.rules.content_sane.params!.pathologicalFlags as string,
+); // 200+ consecutive [ or * → corrupt; avoids O(n^2) regex
+
+// Severity is now config-sourced, so a rule id the validator emits but the
+// registry lacks would silently drop the check (an error-severity drop flips
+// FAILED→PASS). Fail loud at module load instead.
+const EXPECTED_RULE_IDS = [
+  "content_sane",
+  "th_nonempty",
+  "title_translated",
+  "th_translated",
+  "link_set",
+  "link_count",
+  "markdown_balance",
+  "heading_skeleton",
+  "th_untranslated_block",
+  "block_drift",
+  "length_ratio",
+  "parser_completeness",
+  "validator_error",
+] as const;
+for (const id of EXPECTED_RULE_IDS) {
+  if (!CONFIG.rules[id]) {
+    throw new Error(`validation.json is missing rule "${id}"`);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/** One validation rule's outcome. */
+/**
+ * One validation rule's outcome (in-memory). Carries no rendered text: the
+ * message is derived from validation.json via `variant`/`vars` on demand.
+ */
 export interface ValidationCheck {
   id: string;
   severity: "error" | "warn";
   ok: boolean;
-  /** Why it failed (empty when ok). */
-  message: string;
+  /** Template variant that fired (rules with a `messages` map; absent when ok). */
+  variant?: string;
+  /** Measured values for message interpolation (no thresholds; absent when ok). */
+  vars?: Record<string, string | number>;
 }
 
 export interface ValidationResult {
   /** FAILED iff any severity:"error" check failed; warnings never flip it. */
   status: "PASS" | "FAILED";
-  /** Joined messages of failing checks (errors first), or "OK". */
+  /** Joined rendered messages of failing checks (errors first), or "OK".
+   *  Computed in-memory for display/tests; NOT persisted (see StoredValidation). */
   statusDesc: string;
   checks: ValidationCheck[];
   /** ISO timestamp; stamped by the caller (kept out of the pure fn). */
   checkedAt: string;
-  validatorVersion: number;
+  configVersion: number;
+}
+
+/**
+ * What gets PERSISTED per article / index entry: only the dynamic facts. No
+ * rendered text, no severity, no passing checks — the UI renders messages from
+ * validation.json via renderFailures(failures). `toStoredRecord` slims a
+ * ValidationResult into this at the save/backfill boundary.
+ */
+export interface StoredValidation {
+  status: "PASS" | "FAILED";
+  failures: StoredFailure[];
+  checkedAt: string;
+  configVersion: number;
+}
+
+/** A failing check → its persisted, text-free shape. */
+function toStoredFailure(c: ValidationCheck): StoredFailure {
+  return {
+    id: c.id,
+    ...(c.variant ? { variant: c.variant } : {}),
+    ...(c.vars ? { vars: c.vars } : {}),
+  };
+}
+
+/** Slim a full in-memory result to the persisted record (drops text + passing checks). */
+export function toStoredRecord(r: ValidationResult): StoredValidation {
+  return {
+    status: r.status,
+    failures: r.checks.filter((c) => !c.ok).map(toStoredFailure),
+    checkedAt: r.checkedAt,
+    configVersion: r.configVersion,
+  };
 }
 
 export interface ValidateInput {
@@ -374,10 +456,20 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
   const checks: ValidationCheck[] = [];
   const add = (
     id: string,
-    severity: "error" | "warn",
     ok: boolean,
-    message: string,
-  ) => checks.push({ id, severity, ok, message });
+    variant?: string,
+    vars?: Record<string, string | number>,
+  ) => {
+    const rule = CONFIG.rules[id];
+    if (!rule) return; // unknown id never emitted (registry verified at load)
+    checks.push({
+      id,
+      severity: rule.severity,
+      ok,
+      ...(variant ? { variant } : {}),
+      ...(vars ? { vars } : {}),
+    });
+  };
 
   // Robustness: many [ or * make the link/emphasis regex O(n^2). Guard BOTH a
   // long *consecutive* run (PATHOLOGICAL_RUN) and the *total* marker count —
@@ -395,10 +487,8 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
       [
         {
           id: "content_sane",
-          severity: "error",
+          severity: CONFIG.rules.content_sane.severity,
           ok: false,
-          message:
-            "Content is abnormally large or has a pathological marker run (corrupt)",
         },
       ],
       now,
@@ -410,29 +500,21 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
   const cThEmpty = !th.trim();
   add(
     "th_nonempty",
-    "error",
     !(tThEmpty || cThEmpty),
     tThEmpty && cThEmpty
-      ? "Thai title and content are both empty"
+      ? "both"
       : tThEmpty
-        ? "Thai title is empty"
+        ? "title"
         : cThEmpty
-          ? "Thai content is empty"
-          : "",
+          ? "content"
+          : undefined,
   );
 
   // 2. title_translated — the title must not be left byte-identical to English.
   const titleIdentical =
     (title_th || "").trim().length > 0 &&
     (title_th || "").trim() === (title_en || "").trim();
-  add(
-    "title_translated",
-    "error",
-    !titleIdentical,
-    titleIdentical
-      ? "Thai title is byte-identical to English (title not translated)"
-      : "",
-  );
+  add("title_translated", !titleIdentical);
 
   // 3. th_translated — body not identical to English, and actually in Thai.
   const identical = th.trim().length > 0 && th.trim() === en.trim();
@@ -441,13 +523,9 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
     tr.letters >= THAI_RATIO_MIN_LETTERS && tr.ratio < THAI_RATIO_MIN;
   add(
     "th_translated",
-    "error",
     !identical && !lowThai,
-    identical
-      ? "Thai content is byte-identical to English (translation did not run)"
-      : lowThai
-        ? `Thai content looks untranslated — Thai-character ratio ${(tr.ratio * 100).toFixed(0)}% < ${THAI_RATIO_MIN * 100}%`
-        : "",
+    identical ? "identical" : lowThai ? "lowThai" : undefined,
+    lowThai ? { ratioPct: (tr.ratio * 100).toFixed(0) } : undefined,
   );
 
   // 4. link_set — every DISTINCT destination URL in EN must be present in TH and
@@ -464,14 +542,11 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
   const linksOk = missing.length === 0 && extra.length === 0;
   add(
     "link_set",
-    "error",
     linksOk,
+    undefined,
     linksOk
-      ? ""
-      : `Link destinations differ between EN and TH (${missing.length} missing, ${extra.length} added/altered)` +
-          (missing.length
-            ? ` — missing: ${missing.slice(0, 3).join(", ")}`
-            : ""),
+      ? undefined
+      : { missingCount: missing.length, extraCount: extra.length },
   );
 
   // 5. link_count (warn) — same destinations but a different NUMBER of link
@@ -480,11 +555,9 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
   const countOk = !linksOk || enLinks.length === thLinks.length;
   add(
     "link_count",
-    "warn",
     countOk,
-    countOk
-      ? ""
-      : `Same link destinations but a different number of links (EN ${enLinks.length}, TH ${thLinks.length})`,
+    undefined,
+    countOk ? undefined : { enCount: enLinks.length, thCount: thLinks.length },
   );
 
   // 6. markdown_balance — DIFFERENTIAL: flag only orphan markers / unrenderable
@@ -499,21 +572,20 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
   const balOk = !introducedStar && !introducedLink;
   add(
     "markdown_balance",
-    "error",
     balOk,
     balOk
-      ? ""
-      : "Thai markdown introduced markup not in the English — " +
-          [
-            introducedStar
-              ? `${thRes.star - enRes.star} unbalanced * emphasis marker(s)`
-              : "",
-            introducedLink
-              ? `${thRes.link - enRes.link} link(s) that will not render`
-              : "",
-          ]
-            .filter(Boolean)
-            .join("; "),
+      ? undefined
+      : introducedStar && introducedLink
+        ? "both"
+        : introducedStar
+          ? "star"
+          : "link",
+    balOk
+      ? undefined
+      : {
+          starCount: thRes.star - enRes.star,
+          linkCount: thRes.link - enRes.link,
+        },
   );
 
   // 7. heading_skeleton — heading count & level sequence must match. NOTE (known
@@ -523,11 +595,14 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
   const headOk = sameSeq(enHeads, thHeads);
   add(
     "heading_skeleton",
-    "error",
     headOk,
+    undefined,
     headOk
-      ? ""
-      : `Heading structure differs — EN [${enHeads.join(",") || "none"}] vs TH [${thHeads.join(",") || "none"}]`,
+      ? undefined
+      : {
+          enHeads: enHeads.join(",") || "none",
+          thHeads: thHeads.join(",") || "none",
+        },
   );
 
   // 8. th_untranslated_block (warn) — a substantial block left mostly in Latin.
@@ -535,11 +610,9 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
   const untranslated = untranslatedBlockCount(th);
   add(
     "th_untranslated_block",
-    "warn",
     untranslated === 0,
-    untranslated === 0
-      ? ""
-      : `${untranslated} block(s) look untranslated (mostly Latin text)`,
+    undefined,
+    untranslated === 0 ? undefined : { count: untranslated },
   );
 
   // 9. block_drift (warn) — Gemini may merge/split blocks; informational.
@@ -548,11 +621,16 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
   const driftOk = sameSeq(enBlocks, thBlocks);
   add(
     "block_drift",
-    "warn",
     driftOk,
+    undefined,
     driftOk
-      ? ""
-      : `Block structure drifted — EN ${enBlocks.length} blocks (${summarizeCounts(enBlocks)}) vs TH ${thBlocks.length} (${summarizeCounts(thBlocks)})`,
+      ? undefined
+      : {
+          enCount: enBlocks.length,
+          enSummary: summarizeCounts(enBlocks),
+          thCount: thBlocks.length,
+          thSummary: summarizeCounts(thBlocks),
+        },
   );
 
   // 10. length_ratio (warn) — gross truncation/duplication. NOTE: faithful Thai
@@ -564,11 +642,9 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
   const lrOk = enLen === 0 || (lr >= LEN_RATIO_MIN && lr <= LEN_RATIO_MAX);
   add(
     "length_ratio",
-    "warn",
     lrOk,
-    lrOk
-      ? ""
-      : `Thai/English length ratio ${lr.toFixed(2)} outside [${LEN_RATIO_MIN}, ${LEN_RATIO_MAX}] (possible truncation or duplication)`,
+    undefined,
+    lrOk ? undefined : { ratio: lr.toFixed(2) },
   );
 
   // 11. parser_completeness (warn) — only when a source body length is supplied.
@@ -577,11 +653,9 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
     const crOk = cr >= COMPLETENESS_MIN;
     add(
       "parser_completeness",
-      "warn",
       crOk,
-      crOk
-        ? ""
-        : `Parsed English is only ${(cr * 100).toFixed(0)}% of the source body length (parser may have dropped content)`,
+      undefined,
+      crOk ? undefined : { pct: (cr * 100).toFixed(0) },
     );
   }
 
@@ -590,22 +664,19 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
 
 function finalize(checks: ValidationCheck[], now: string): ValidationResult {
   const failing = checks.filter((c) => !c.ok);
-  const errors = failing.filter((c) => c.severity === "error");
-  const warns = failing.filter((c) => c.severity === "warn");
-  const status: "PASS" | "FAILED" = errors.length > 0 ? "FAILED" : "PASS";
+  const status: "PASS" | "FAILED" = failing.some((c) => c.severity === "error")
+    ? "FAILED"
+    : "PASS";
+  // statusDesc is rendered (errors first) from the same registry the UI uses,
+  // for display/tests only — it is not persisted (see toStoredRecord).
   const statusDesc =
-    failing.length === 0
-      ? "OK"
-      : [...errors, ...warns]
-          .map((c) => c.message)
-          .filter(Boolean)
-          .join(" | ");
+    failing.length === 0 ? "OK" : renderFailures(failing.map(toStoredFailure));
   return {
     status,
     statusDesc,
     checks,
     checkedAt: now,
-    validatorVersion: VALIDATOR_VERSION,
+    configVersion: CONFIG_VERSION,
   };
 }
 
@@ -627,9 +698,10 @@ export function validateArticle(
       [
         {
           id: "validator_error",
-          severity: "error",
+          // Hardcoded fallback so the failsafe never depends on a clean lookup.
+          severity: CONFIG.rules.validator_error?.severity ?? "error",
           ok: false,
-          message: `Validator error: ${(e as Error).message}`,
+          vars: { error: (e as Error).message },
         },
       ],
       now,

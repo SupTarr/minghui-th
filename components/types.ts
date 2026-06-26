@@ -1,8 +1,13 @@
-import type { ValidationResult } from "../lib/contentValidation";
+import type {
+  StoredValidation,
+  StoredFailure,
+} from "../lib/contentValidation";
 
 export type {
   ValidationResult,
   ValidationCheck,
+  StoredValidation,
+  StoredFailure,
 } from "../lib/contentValidation";
 
 export interface Article {
@@ -17,9 +22,10 @@ export interface Article {
   filePath?: string;
   // Set by the content validator. Lives on the lightweight catalog entry so the
   // "Needs review" tab can filter from the per-day index without loading each
-  // article's full JSON.
+  // article's full JSON. Message text is rendered from validation.json via
+  // renderFailures(failures) — never persisted.
   status?: "PASS" | "FAILED";
-  statusDesc?: string;
+  failures?: StoredFailure[];
 }
 
 export interface ArticleDetails {
@@ -31,6 +37,6 @@ export interface ArticleDetails {
   title_en: string;
   content_th: string;
   content_en: string;
-  // Full per-rule validation detail, persisted in the per-article JSON.
-  validation?: ValidationResult;
+  // Slim, text-free validation record persisted in the per-article JSON.
+  validation?: StoredValidation;
 }

@@ -1,8 +1,8 @@
 // Backfill the content-validation status onto the existing archive.
 //
 // Runs the SAME deterministic validator the live pipeline uses
-// (lib/contentValidation.mts) over every archived article, writes the full
-// `validation` result into the per-article JSON, and mirrors status/statusDesc
+// (lib/contentValidation.ts) over every archived article, writes the slim
+// `validation` record into the per-article JSON, and mirrors status/failures
 // onto the per-day index entry — so old content shows up in the app's
 // "Needs review" tab alongside freshly-flagged content.
 //
@@ -20,8 +20,10 @@
 import { google, type drive_v3 } from "googleapis";
 import {
   validateArticle,
-  VALIDATOR_VERSION,
-  type ValidationResult,
+  toStoredRecord,
+  CONFIG_VERSION,
+  type StoredValidation,
+  type StoredFailure,
 } from "../lib/contentValidation.ts";
 
 const APPLY = process.argv.includes("--apply");
@@ -47,7 +49,7 @@ interface ArticleFile {
   title_th?: string;
   content_en?: string;
   content_th?: string;
-  validation?: ValidationResult;
+  validation?: StoredValidation;
   [k: string]: unknown;
 }
 
@@ -55,7 +57,7 @@ interface IndexEntry {
   url?: string;
   filePath?: string;
   status?: "PASS" | "FAILED";
-  statusDesc?: string;
+  failures?: StoredFailure[];
   [k: string]: unknown;
 }
 
@@ -192,7 +194,7 @@ async function main(): Promise<void> {
 
   const mode = APPLY ? "APPLY (writing)" : "DRY-RUN (no writes)";
   console.log(
-    `Backfill validation — mode: ${mode}, validatorVersion: ${VALIDATOR_VERSION}` +
+    `Backfill validation — mode: ${mode}, configVersion: ${CONFIG_VERSION}` +
       `${REFETCH ? ", refetch: on" : ""}` +
       `${FROM || TO ? `, range: ${FROM || "…"}..${TO || "…"}` : ""}`,
   );
@@ -269,7 +271,7 @@ async function main(): Promise<void> {
       if (
         !FORCE &&
         art.validation &&
-        art.validation.validatorVersion === VALIDATOR_VERSION
+        art.validation.configVersion === CONFIG_VERSION
       ) {
         skipped++;
         if (art.validation.status === "FAILED") failed++;
@@ -308,18 +310,20 @@ async function main(): Promise<void> {
         }
       }
 
+      const stored = toStoredRecord(result);
       const entryChanged =
-        entry.status !== result.status ||
-        entry.statusDesc !== result.statusDesc;
+        entry.status !== stored.status ||
+        JSON.stringify(entry.failures ?? null) !==
+          JSON.stringify(stored.failures);
       if (entryChanged) {
-        entry.status = result.status;
-        entry.statusDesc = result.statusDesc;
+        entry.status = stored.status;
+        entry.failures = stored.failures;
         dayChanged++;
         changed++;
       }
 
       if (APPLY) {
-        art.validation = result;
+        art.validation = stored;
         try {
           await updateJson(articleId, art);
         } catch (e) {
