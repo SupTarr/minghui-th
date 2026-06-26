@@ -31,7 +31,9 @@ export async function POST(req: Request) {
     // internal service). The client-side shape check is UX only, not a boundary.
     if (!isAllowedArticleUrl(url)) {
       return NextResponse.json(
-        { error: `Article URL must be an https://${ALLOWED_ARTICLE_HOST} link` },
+        {
+          error: `Article URL must be an https://${ALLOWED_ARTICLE_HOST} link`,
+        },
         { status: 400 },
       );
     }

@@ -81,7 +81,6 @@ export default function ArchiveList({
         />
       </div>
 
-      {/* Tab Toggles */}
       <div className="flex bg-[#0c1220]/60 p-1 border border-slate-900 rounded-xl">
         <button
           type="button"
@@ -124,7 +123,6 @@ export default function ArchiveList({
         </button>
       </div>
 
-      {/* Scrollable list of articles */}
       <div
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto scrollbar-thin pr-1 space-y-3 pb-6"

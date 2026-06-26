@@ -55,7 +55,6 @@ export default function Dashboard() {
     "archived" | "newly-synced" | "needs-review"
   >("archived");
   const [isSyncing, setIsSyncing] = useState(false);
-  // Single-article import: paste a URL → translate → save → index (one item).
   const [importUrl, setImportUrl] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [newCount, setNewCount] = useState<number | null>(null);
@@ -80,7 +79,6 @@ export default function Dashboard() {
     return `${yyyy}-${mm}-${dd}`;
   });
 
-  // Paginate the archive list — 5 articles per page with prev/next controls.
   const PAGE_SIZE = 5;
   const [currentPage, setCurrentPage] = useState(1);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -439,7 +437,6 @@ export default function Dashboard() {
         if (res.ok) {
           const data = await res.json();
           if (signal?.aborted) return;
-          // Sort by date descending
           const sorted = (data.articles || []).sort(
             (a: Article, b: Article) =>
               new Date(b.date).getTime() - new Date(a.date).getTime(),
@@ -503,7 +500,6 @@ export default function Dashboard() {
       addLog("กำลังเริ่มตรวจสอบบทความใหม่จาก en.minghui.org...");
       setStatusMessage("กำลังตรวจหาบทความใหม่...");
 
-      // 1. Scrape
       const scrapeRes = await fetch("/api/scrape", {
         method: "POST",
         headers: {
@@ -525,7 +521,6 @@ export default function Dashboard() {
       const scrapeData = await scrapeRes.json();
       let newArticles = scrapeData.articles || [];
 
-      // Filter by selected date range if specified
       if (startDate) {
         const end = endDate || startDate;
         newArticles = newArticles.filter(
@@ -550,7 +545,6 @@ export default function Dashboard() {
 
       setProgressPercent(15);
 
-      // 2. Loop through each article for translate -> save
       for (let i = 0; i < newArticles.length; i++) {
         if (isCancelledRef.current) {
           throw new DOMException("Aborted by user", "AbortError");
@@ -560,7 +554,6 @@ export default function Dashboard() {
         const stepWeight = 85 / newArticles.length;
         const currentBaseProgress = 15 + i * stepWeight;
 
-        // --- Translation Step ---
         addLog(`กำลังแปล: ${article.title_en}...`);
         setStatusMessage(
           `กำลังแปล (${i + 1}/${newArticles.length}): ${article.title_en}`,
@@ -592,7 +585,6 @@ export default function Dashboard() {
         const transData = await transRes.json();
         addLog(`✨ แปลสำเร็จ: "${transData.title_th}"`);
 
-        // --- Save Step ---
         setStatusMessage(
           `กำลังบันทึก (${i + 1}/${newArticles.length}): ${transData.title_th}`,
         );
@@ -637,7 +629,6 @@ export default function Dashboard() {
         const saveData = await saveRes.json();
         addLog(`💾 บันทึกสำเร็จ: ${saveData.filePath}`);
 
-        // Add to newly synced list
         const syncedArticle: Article = {
           url: article.url,
           title_en: article.title_en,
@@ -774,7 +765,6 @@ export default function Dashboard() {
 
       const date = parseDateFromArticleUrl(url);
 
-      // --- Translation Step --- (/api/translate fetches & parses the page itself)
       const transRes = await fetch("/api/translate", {
         method: "POST",
         headers: {
@@ -799,7 +789,6 @@ export default function Dashboard() {
       const transData = await transRes.json();
       addLog(`✨ แปลสำเร็จ: "${transData.title_th}"`);
 
-      // --- Save Step ---
       setStatusMessage(`กำลังบันทึก: ${transData.title_th}`);
       addLog("กำลังบันทึกบทความลง Google Drive...");
 
@@ -917,14 +906,12 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#060913] text-[#f8fafc] font-sans selection:bg-teal-500 selection:text-slate-950 relative overflow-x-hidden">
-      {/* Background glow effects - soft and meditative */}
       <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-teal-500/[0.03] rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[20%] right-[10%] w-[600px] h-[600px] bg-indigo-500/[0.03] rounded-full blur-[150px] pointer-events-none" />
 
       <Header googleIdToken={googleIdToken} userEmail={userEmail} />
 
       <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 relative z-10">
-        {/* Sync Summary Notification */}
         {newCount !== null && (
           <div
             className={`mb-6 p-4 rounded-2xl border flex items-center justify-between animate-fade-in ${
@@ -1018,7 +1005,6 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* Immersive Zen Reader Modal Overlay */}
       {readingArticlePath && (
         <ArticleReader
           articleContent={articleContent}

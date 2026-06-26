@@ -25,7 +25,6 @@ export default function DateRangePicker({
   const [showCalendar, setShowCalendar] = useState(false);
   const calendarRef = useRef<HTMLDivElement>(null);
 
-  // Close calendar popover on click outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -39,7 +38,6 @@ export default function DateRangePicker({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Toggle the popover; when opening, jump to the selected start month
   const toggleCalendar = () => {
     if (disabled) return;
     if (!showCalendar && startDate) {
@@ -95,7 +93,6 @@ export default function DateRangePicker({
     return `${parseInt(d)} ${month} ${y}`;
   }
 
-  // Format ranges (e.g. 16 มิ.ย. 2026 - 23 มิ.ย. 2026)
   function formatThaiDateRange(startStr: string, endStr: string) {
     if (!startStr) return "ทั้งหมด (ไม่มีกรอง)";
     const end = endStr || startStr;
@@ -132,7 +129,6 @@ export default function DateRangePicker({
       isCurrentMonth: boolean;
     }> = [];
 
-    // Days from previous month
     for (let i = firstDayIndex - 1; i >= 0; i--) {
       const prevDay = prevMonthDays - i;
       const prevDate = new Date(year, month - 1, prevDay);
@@ -143,7 +139,6 @@ export default function DateRangePicker({
       });
     }
 
-    // Days from current month
     for (let i = 1; i <= daysInMonth; i++) {
       const currentDate = new Date(year, month, i);
       days.push({
@@ -153,7 +148,6 @@ export default function DateRangePicker({
       });
     }
 
-    // Days from next month (fill grid to 42 items)
     const totalGridItems = 42;
     const remainingDays = totalGridItems - days.length;
     for (let i = 1; i <= remainingDays; i++) {

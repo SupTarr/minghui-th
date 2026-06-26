@@ -1,7 +1,4 @@
-import type {
-  StoredValidation,
-  StoredFailure,
-} from "../lib/contentValidation";
+import type { StoredValidation, StoredFailure } from "../lib/contentValidation";
 
 export type {
   ValidationResult,
