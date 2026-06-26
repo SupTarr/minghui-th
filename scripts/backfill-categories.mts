@@ -60,7 +60,7 @@ interface ArticleFile {
   content_th?: string;
   category?: string;
   subcategory?: string;
-  published_date?: string;
+  date?: string;
   [k: string]: unknown;
 }
 
@@ -249,11 +249,12 @@ async function rebuildIndex(
         url: art.url,
         title_en: art.title_en ?? "",
         title_th: art.title_th ?? "",
-        date: art.published_date || date,
+        date: art.date || date,
         // Mirror the article file's already-split fields. Run the standard
         // --apply migration first so these hold the parent/sub split rather than
-        // an un-migrated leaf.
-        category: art.category || "Cultivation",
+        // an un-migrated leaf. Leave category unset when absent (don't relabel an
+        // unknown article "Cultivation") to match the save path.
+        ...(art.category ? { category: art.category } : {}),
         ...(art.subcategory ? { subcategory: art.subcategory } : {}),
         filePath: `/${date}/${name}`,
       });
@@ -321,7 +322,7 @@ async function main() {
     fieldDrift: 0, // index entry fields disagree with the article file
     fileMissing: 0, // index entry points to an absent/unreadable article file
     badJson: 0, // index.json or an article file is not valid JSON
-    dateMisfiled: 0, // folder name / entry.date / published_date disagree
+    dateMisfiled: 0, // folder name / entry.date / file date disagree
     catMismatch: 0,
     catMissing: 0,
     catUnresolved: 0,
@@ -502,24 +503,24 @@ async function main() {
         cmp("url", entry.url, art.url);
         cmp("title_en", entry.title_en, art.title_en);
         cmp("title_th", entry.title_th, art.title_th);
-        cmp("date", entry.date, art.published_date);
+        cmp("date", entry.date, art.date);
         if (drift.length) {
           au.fieldDrift++;
           issues.push("fieldDrift");
           log(id, "FIELD-DRIFT", drift.join("; "));
         }
 
-        // Date misfiling: folder name == entry.date == published_date.
+        // Date misfiling: folder name == entry.date == file date.
         if (
           entry.date !== date ||
-          (art.published_date && art.published_date !== date)
+          (art.date && art.date !== date)
         ) {
           au.dateMisfiled++;
           issues.push("dateMisfiled");
           log(
             id,
             "DATE-MISFILED",
-            `folder=${date} entry.date=${entry.date} published_date=${art.published_date ?? "—"}`,
+            `folder=${date} entry.date=${entry.date} file.date=${art.date ?? "—"}`,
           );
         }
 
@@ -674,10 +675,11 @@ async function main() {
             url: art.url,
             title_en: art.title_en ?? "",
             title_th: art.title_th ?? "",
-            date: art.published_date || date,
+            date: art.date || date,
             // Mirror the article file's split fields (run --apply first so they
-            // hold the parent/sub split, not an un-migrated leaf).
-            category: art.category || "Cultivation",
+            // hold the parent/sub split, not an un-migrated leaf). Leave category
+            // unset when absent rather than relabeling it "Cultivation".
+            ...(art.category ? { category: art.category } : {}),
             ...(art.subcategory ? { subcategory: art.subcategory } : {}),
             filePath: `/${date}/${name}`,
           });

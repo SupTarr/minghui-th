@@ -36,6 +36,11 @@ const argVal = (name: string): string | null => {
 const FROM = argVal("from"); // inclusive YYYY-MM-DD, optional
 const TO = argVal("to"); // inclusive YYYY-MM-DD, optional
 
+// Must match lib/gdrive.ts NEEDS_REVIEW_FILE. The backfill rebuilds this root file
+// authoritatively from a full scan (see the end of main), which heals any drift
+// the live /api/index writes may have left.
+const NEEDS_REVIEW_FILE = "needs-review.json";
+
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -161,6 +166,36 @@ async function updateJson(fileId: string, obj: unknown): Promise<void> {
   });
 }
 
+// Find-or-create a JSON file by name directly under the root folder (the backfill
+// has no by-name writer like lib/gdrive's writeFile, and needs-review.json lives
+// at the root). `name` is a hardcoded constant here, so no query escaping needed.
+async function writeRootJson(
+  rootId: string,
+  name: string,
+  obj: unknown,
+): Promise<void> {
+  const body = JSON.stringify(obj);
+  const existing = await listAll(
+    `name = '${name}' and '${rootId}' in parents and trashed = false`,
+    "files(id)",
+  );
+  if (existing.length > 0) {
+    await drive.files.update({
+      fileId: existing[0].id as string,
+      supportsAllDrives: true,
+      media: { mimeType: "application/json", body },
+      fields: "id",
+    });
+  } else {
+    await drive.files.create({
+      supportsAllDrives: true,
+      requestBody: { name, parents: [rootId], mimeType: "application/json" },
+      media: { mimeType: "application/json", body },
+      fields: "id",
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Source-body length (for the completeness check) — only with --refetch
 // ---------------------------------------------------------------------------
@@ -219,6 +254,9 @@ async function main(): Promise<void> {
   let skipped = 0; // already at current version (no --force)
   let changed = 0; // entries whose status/desc changed (would be) written
   const checkFailCounts = new Map<string, number>();
+  // Every article currently FAILED, accumulated across the scan to rebuild
+  // needs-review.json authoritatively at the end (full scans only).
+  const failuresAccum: IndexEntry[] = [];
 
   for (const folder of dateFolders) {
     const date = folder.name as string;
@@ -274,8 +312,10 @@ async function main(): Promise<void> {
         art.validation.configVersion === CONFIG_VERSION
       ) {
         skipped++;
-        if (art.validation.status === "FAILED") failed++;
-        else pass++;
+        if (art.validation.status === "FAILED") {
+          failed++;
+          failuresAccum.push(entry);
+        } else pass++;
         continue;
       }
 
@@ -321,6 +361,7 @@ async function main(): Promise<void> {
         dayChanged++;
         changed++;
       }
+      if (stored.status === "FAILED") failuresAccum.push(entry);
 
       if (APPLY) {
         art.validation = stored;
@@ -356,6 +397,33 @@ async function main(): Promise<void> {
     console.log("Check failures/warnings (for threshold calibration):");
     console.log(lines.join("\n"));
   }
+  // Rebuild the global failures index from everything scanned — but only on a
+  // FULL scan, since a ranged (--from/--to) run would otherwise drop out-of-range
+  // failures from needs-review.json. This authoritative overwrite is the reconcile
+  // step that heals any drift the live /api/index writes may have left.
+  const fullScan = !FROM && !TO;
+  if (!fullScan) {
+    console.log(
+      `\nSkipped ${NEEDS_REVIEW_FILE} rebuild (ranged run). Re-run without ` +
+        `--from/--to to rebuild it from the full archive.`,
+    );
+  } else if (APPLY) {
+    try {
+      await writeRootJson(rootId, NEEDS_REVIEW_FILE, failuresAccum);
+      console.log(
+        `\nWrote ${NEEDS_REVIEW_FILE} — ${failuresAccum.length} flagged article(s).`,
+      );
+    } catch (e) {
+      console.warn(
+        `\nFailed writing ${NEEDS_REVIEW_FILE}: ${(e as Error).message}`,
+      );
+    }
+  } else {
+    console.log(
+      `\n(dry-run) ${NEEDS_REVIEW_FILE} would list ${failuresAccum.length} flagged article(s).`,
+    );
+  }
+
   if (!APPLY && changed) {
     console.log("\nRe-run with --apply to write these flags.");
   }

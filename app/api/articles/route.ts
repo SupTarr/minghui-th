@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache";
 import {
   readDayIndex,
   ARCHIVE_LIST_TAG,
-  type CatalogEntry,
+  type Article,
 } from "@/lib/gdrive";
 
 export const dynamic = "force-dynamic";
@@ -49,14 +49,14 @@ function enumerateDates(from: string | null, to: string | null): string[] {
  * Reads the per-day catalog indexes for the given dates and returns the entries
  * newest-first. A corrupted single day degrades to empty rather than failing all.
  */
-async function loadArticlesForDates(dates: string[]): Promise<CatalogEntry[]> {
+async function loadArticlesForDates(dates: string[]): Promise<Article[]> {
   const dayResults = await Promise.all(
     dates.map(async (date) => {
       try {
         return await readDayIndex(date);
       } catch (e) {
         console.error(`Failed reading day index ${date}:`, e);
-        return [] as CatalogEntry[];
+        return [] as Article[];
       }
     }),
   );

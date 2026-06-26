@@ -83,18 +83,48 @@ export default function Dashboard() {
   const [currentPage, setCurrentPage] = useState(1);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Articles the validator flagged FAILED, within the current date scope. Drawn
-  // from archivedArticles (which already includes this session's synced items),
-  // so backfilled old content and freshly flagged content share one tab.
-  const needsReview = useMemo(
-    () => archivedArticles.filter((a) => a.status === "FAILED"),
-    [archivedArticles],
-  );
+  // The "Needs review" tab shows EVERY outstanding failure across the whole
+  // archive, read in O(1) from the maintained failures index (/api/needs-review)
+  // instead of the date-windowed archive list. Re-fetched on each tab open (the
+  // response is cached, so it's cheap) so it also picks up failures from other
+  // sources like the cron.
+  const [allFailures, setAllFailures] = useState<Article[]>([]);
+
+  useEffect(() => {
+    if (activeTab !== "needs-review") return;
+    let cancelled = false;
+    fetch("/api/needs-review")
+      .then((res) =>
+        res.ok ? res.json() : Promise.reject(new Error(`Status ${res.status}`)),
+      )
+      .then((data) => {
+        if (!cancelled)
+          setAllFailures(Array.isArray(data?.articles) ? data.articles : []);
+      })
+      .catch((e) => {
+        if (!cancelled) console.error("Failed to load needs-review:", e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
+
+  // Union the global failures with this session's flagged items so just-synced
+  // results appear immediately; newlySynced overrides the fetched copy, so a
+  // re-synced article that now PASSes drops out before we keep only FAILED ones.
+  const needsReview = useMemo(() => {
+    const byUrl = new Map<string, Article>();
+    for (const a of allFailures) byUrl.set(a.url, a);
+    for (const a of newlySynced) byUrl.set(a.url, a);
+    return Array.from(byUrl.values())
+      .filter((a) => a.status === "FAILED")
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [allFailures, newlySynced]);
 
   const listArticles = useMemo(() => {
     // The archive list is already date-scoped by the server fetch, so the
     // "archived" tab renders it as-is; "newly-synced" is this session's results,
-    // and "needs-review" is the date-scoped articles the validator flagged.
+    // and "needs-review" is every outstanding failure across the whole archive.
     if (activeTab === "newly-synced") return newlySynced;
     if (activeTab === "needs-review") return needsReview;
     return archivedArticles;
@@ -175,7 +205,18 @@ export default function Dashboard() {
   const [googleIdToken, setGoogleIdToken] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
-  async function handleGoogleLoginResponse(response: GoogleCredentialResponse) {
+  // Stable (useCallback) so the mount-only bootstrap effect below can depend on
+  // handleGoogleLoginResponse without re-injecting the Google SDK each render.
+  const handleSignOut = useCallback(() => {
+    setGoogleIdToken(null);
+    setUserEmail(null);
+    localStorage.removeItem("google_id_token");
+    localStorage.removeItem("google_user_email");
+  }, []);
+
+  const handleGoogleLoginResponse = useCallback(async (
+    response: GoogleCredentialResponse,
+  ) => {
     const idToken = response.credential;
     if (!idToken) return;
 
@@ -229,14 +270,7 @@ export default function Dashboard() {
     setUserEmail(email);
     localStorage.setItem("google_id_token", idToken);
     if (email) localStorage.setItem("google_user_email", email);
-  }
-
-  function handleSignOut() {
-    setGoogleIdToken(null);
-    setUserEmail(null);
-    localStorage.removeItem("google_id_token");
-    localStorage.removeItem("google_user_email");
-  }
+  }, [addLog, handleSignOut]);
 
   // Returns true if a Google ID token (JWT) is missing, malformed, or past its exp.
   function isTokenExpired(idToken: string): boolean {
@@ -294,7 +328,7 @@ export default function Dashboard() {
         }
       })
       .catch((err) => console.error("Failed to load auth config:", err));
-  }, []);
+  }, [handleGoogleLoginResponse]);
 
   async function handleCopyShareLink() {
     if (!readingArticlePath) return;
@@ -627,7 +661,7 @@ export default function Dashboard() {
         }
 
         const saveData = await saveRes.json();
-        addLog(`💾 บันทึกสำเร็จ: ${saveData.filePath}`);
+        addLog(`💾 บันทึกสำเร็จ: ${saveData.entry?.filePath}`);
 
         const syncedArticle: Article = {
           url: article.url,
@@ -636,7 +670,7 @@ export default function Dashboard() {
           date: article.date,
           category: saveData.entry?.category ?? article.category,
           subcategory: saveData.entry?.subcategory ?? article.subcategory,
-          filePath: saveData.filePath,
+          filePath: saveData.entry?.filePath,
           // Carry the validation flag so it rides into the per-day index and the
           // session's in-memory lists (powering the "Needs review" tab).
           status: saveData.entry?.status,
@@ -827,7 +861,7 @@ export default function Dashboard() {
       }
 
       const saveData = await saveRes.json();
-      addLog(`💾 บันทึกสำเร็จ: ${saveData.filePath}`);
+      addLog(`💾 บันทึกสำเร็จ: ${saveData.entry?.filePath}`);
 
       const importedArticle: Article = {
         url,
@@ -836,7 +870,7 @@ export default function Dashboard() {
         date,
         category: saveData.entry?.category ?? "Cultivation",
         subcategory: saveData.entry?.subcategory ?? transData.subcategory,
-        filePath: saveData.filePath,
+        filePath: saveData.entry?.filePath,
         status: saveData.entry?.status,
         failures: saveData.entry?.failures,
       };
@@ -906,8 +940,8 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#060913] text-[#f8fafc] font-sans selection:bg-teal-500 selection:text-slate-950 relative overflow-x-hidden">
-      <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-teal-500/[0.03] rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[20%] right-[10%] w-[600px] h-[600px] bg-indigo-500/[0.03] rounded-full blur-[150px] pointer-events-none" />
+      <div className="absolute top-[-10%] left-[20%] w-125 h-125 bg-teal-500/3 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[20%] right-[10%] w-150 h-150 bg-indigo-500/3 rounded-full blur-[150px] pointer-events-none" />
 
       <Header googleIdToken={googleIdToken} userEmail={userEmail} />
 
