@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { writeFile } from "@/lib/gdrive";
 import { authorize } from "@/lib/auth";
 import { isValidArticleDate, isHttpUrl } from "@/lib/apiValidation";
+import {
+  toStoredRecord,
+  type ValidationResult,
+  type StoredValidation,
+} from "@/lib/contentValidation";
 
 export async function POST(req: Request) {
   try {
@@ -84,6 +89,19 @@ export async function POST(req: Request) {
     const folderName = date; // Format: YYYY-MM-DD
     const fileName = `${articleId}.json`;
 
+    // Slim the validation to its persisted, text-free shape. /api/translate sends
+    // the full in-memory result (has `checks`); a manual re-save may send an
+    // already-slim record (has `failures`) — pass that through unchanged.
+    const rawValidation =
+      validation && typeof validation === "object"
+        ? (validation as Record<string, unknown>)
+        : null;
+    const storedValidation: StoredValidation | undefined = rawValidation
+      ? Array.isArray(rawValidation.checks)
+        ? toStoredRecord(rawValidation as unknown as ValidationResult)
+        : (rawValidation as unknown as StoredValidation)
+      : undefined;
+
     const articlePayload = {
       url,
       title_en,
@@ -94,8 +112,8 @@ export async function POST(req: Request) {
       ...(articleSubcategory ? { subcategory: articleSubcategory } : {}),
       published_date: date,
       fetched_at: new Date().toISOString(),
-      // Full validation detail (optional — absent on manual saves that skip it).
-      ...(validation && typeof validation === "object" ? { validation } : {}),
+      // Slim, text-free validation record (optional — absent on manual saves).
+      ...(storedValidation ? { validation: storedValidation } : {}),
     };
 
     // 3. Write individual article JSON to Drive folder
@@ -112,10 +130,15 @@ export async function POST(req: Request) {
       category: articleCategory,
       ...(articleSubcategory ? { subcategory: articleSubcategory } : {}),
       filePath: `/${folderName}/${fileName}`,
-      // Mirror the validation status onto the catalog entry so the archive list
-      // and "Needs review" tab can filter without loading each article file.
-      ...(validation && typeof validation === "object"
-        ? { status: validation.status, statusDesc: validation.statusDesc }
+      // Mirror the validation summary onto the catalog entry so the archive list
+      // and "Needs review" tab can filter + render without loading each article
+      // file. statusDesc is no longer written — the UI renders text from
+      // validation.json via renderFailures(failures).
+      ...(storedValidation
+        ? {
+            status: storedValidation.status,
+            failures: storedValidation.failures,
+          }
         : {}),
     };
 

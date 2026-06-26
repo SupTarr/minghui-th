@@ -1,0 +1,103 @@
+{
+  "version": 3,
+  "rules": {
+    "content_sane": {
+      "severity": "error",
+      "label": "Content sanity / size guard",
+      "params": {
+        "maxContentChars": 100000,
+        "maxInlineMarkers": 4000,
+        "pathologicalPattern": "[[*]{200,}",
+        "pathologicalFlags": ""
+      },
+      "message": "เนื้อหาผิดปกติ: มีขนาดใหญ่เกินไปหรือมีอักขระซ้ำผิดปกติ (อาจเสียหาย)"
+    },
+    "th_nonempty": {
+      "severity": "error",
+      "label": "Thai title & content present",
+      "messages": {
+        "both": "ชื่อเรื่องและเนื้อหาภาษาไทยว่างเปล่าทั้งคู่",
+        "title": "ชื่อเรื่องภาษาไทยว่างเปล่า",
+        "content": "เนื้อหาภาษาไทยว่างเปล่า"
+      }
+    },
+    "title_translated": {
+      "severity": "error",
+      "label": "Title translated",
+      "message": "ชื่อเรื่องภาษาไทยเหมือนภาษาอังกฤษทุกตัวอักษร (ยังไม่ได้แปลชื่อเรื่อง)"
+    },
+    "th_translated": {
+      "severity": "error",
+      "label": "Body translated and in Thai",
+      "params": {
+        "thaiRatioMin": 0.4,
+        "thaiRatioMinLetters": 12,
+        "thaiRatioMinPct": 40
+      },
+      "messages": {
+        "identical": "เนื้อหาภาษาไทยเหมือนภาษาอังกฤษทุกตัวอักษร (การแปลไม่ทำงาน)",
+        "lowThai": "เนื้อหาดูเหมือนยังไม่ได้แปล — สัดส่วนอักษรไทย {ratioPct}% < {thaiRatioMinPct}%"
+      }
+    },
+    "link_set": {
+      "severity": "error",
+      "label": "Link destination set matches EN",
+      "message": "ลิงก์ปลายทางระหว่าง EN กับ TH ไม่ตรงกัน (ขาด {missingCount} เพิ่ม/เปลี่ยน {extraCount})"
+    },
+    "link_count": {
+      "severity": "warn",
+      "label": "Link occurrence count matches EN",
+      "message": "ลิงก์ปลายทางเหมือนกันแต่จำนวนลิงก์ต่างกัน (EN {enCount}, TH {thCount})"
+    },
+    "markdown_balance": {
+      "severity": "error",
+      "label": "No TH-introduced markdown residue",
+      "messages": {
+        "star": "มาร์กดาวน์ภาษาไทยเพิ่มสัญลักษณ์ที่ไม่มีในภาษาอังกฤษ — เครื่องหมายเน้น * ที่ไม่สมดุล {starCount} ตัว",
+        "link": "มาร์กดาวน์ภาษาไทยเพิ่มสัญลักษณ์ที่ไม่มีในภาษาอังกฤษ — ลิงก์ที่แสดงผลไม่ได้ {linkCount} รายการ",
+        "both": "มาร์กดาวน์ภาษาไทยเพิ่มสัญลักษณ์ที่ไม่มีในภาษาอังกฤษ — เครื่องหมายเน้น * ที่ไม่สมดุล {starCount} ตัว; ลิงก์ที่แสดงผลไม่ได้ {linkCount} รายการ"
+      }
+    },
+    "heading_skeleton": {
+      "severity": "error",
+      "label": "Heading count & level sequence match",
+      "message": "โครงสร้างหัวข้อไม่ตรงกัน — EN [{enHeads}] กับ TH [{thHeads}]"
+    },
+    "th_untranslated_block": {
+      "severity": "warn",
+      "label": "No substantial untranslated block",
+      "params": {
+        "blockUntranslatedMinLetters": 40,
+        "blockThaiMin": 0.15
+      },
+      "message": "มี {count} ย่อหน้าที่ดูเหมือนยังไม่ได้แปล (ส่วนใหญ่เป็นอักษรละติน)"
+    },
+    "block_drift": {
+      "severity": "warn",
+      "label": "Block structure matches EN",
+      "message": "โครงสร้างย่อหน้าคลาดเคลื่อน — EN {enCount} ย่อหน้า ({enSummary}) กับ TH {thCount} ({thSummary})"
+    },
+    "length_ratio": {
+      "severity": "warn",
+      "label": "TH/EN length ratio within band",
+      "params": {
+        "lenRatioMin": 0.3,
+        "lenRatioMax": 3.0
+      },
+      "message": "สัดส่วนความยาว ไทย/อังกฤษ {ratio} อยู่นอกช่วง [{lenRatioMin}, {lenRatioMax}] (อาจถูกตัดทอนหรือซ้ำซ้อน)"
+    },
+    "parser_completeness": {
+      "severity": "warn",
+      "label": "Parsed EN covers source body",
+      "params": {
+        "completenessMin": 0.6
+      },
+      "message": "เนื้อหาอังกฤษที่แยกได้มีเพียง {pct}% ของความยาวต้นฉบับ (ตัวแยกอาจทำเนื้อหาตกหล่น)"
+    },
+    "validator_error": {
+      "severity": "error",
+      "label": "Validator internal error (failsafe)",
+      "message": "ข้อผิดพลาดของตัวตรวจสอบ: {error}"
+    }
+  }
+}

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { validateArticle, extractSkeleton } from "./contentValidation";
+import {
+  validateArticle,
+  extractSkeleton,
+  toStoredRecord,
+} from "./contentValidation";
+import { renderFailures } from "./validationMessages";
 
 // A structurally faithful EN/TH pair: same headings, same link URL, balanced
 // markers, Thai actually present. The translated link *text* differs (expected);
@@ -71,7 +76,7 @@ describe("validateArticle — PASS", () => {
     const errors = r.checks.filter((c) => c.severity === "error" && !c.ok);
     expect(errors).toEqual([]);
     expect(r.status).toBe("PASS");
-    expect(r.validatorVersion).toBeGreaterThan(0);
+    expect(r.configVersion).toBeGreaterThan(0);
   });
 
   it("a minimal clean pair yields statusDesc OK (no warnings either)", () => {
@@ -252,7 +257,7 @@ describe("validateArticle — warnings keep status PASS", () => {
     });
     expect(r.status).toBe("PASS");
     expect(failed("block_drift", r)?.severity).toBe("warn");
-    expect(r.statusDesc).toContain("Block structure drifted");
+    expect(r.statusDesc).toContain("โครงสร้างย่อหน้าคลาดเคลื่อน");
   });
 
   it("parser_completeness warns when parsed EN is short vs the source body", () => {
@@ -277,5 +282,42 @@ describe("validateArticle — warnings keep status PASS", () => {
     expect(
       r.checks.find((c) => c.id === "parser_completeness"),
     ).toBeUndefined();
+  });
+});
+
+describe("toStoredRecord — slim, text-free persisted shape", () => {
+  it("keeps only failing checks as {id, variant?, vars?}; no text/severity/checks", () => {
+    const r = validateArticle({ ...base, title_th: base.title_en });
+    const stored = toStoredRecord(r);
+    expect(stored.status).toBe("FAILED");
+    expect(stored.configVersion).toBe(r.configVersion);
+    const rec = stored as unknown as Record<string, unknown>;
+    expect(rec.statusDesc).toBeUndefined();
+    expect(rec.checks).toBeUndefined();
+    expect(stored.failures.every((f) => f.id && !("severity" in f))).toBe(true);
+    expect(stored.failures.map((f) => f.id).sort()).toEqual(
+      r.checks
+        .filter((c) => !c.ok)
+        .map((c) => c.id)
+        .sort(),
+    );
+  });
+
+  it("a PASS article stores an empty failures list", () => {
+    const stored = toStoredRecord(validateArticle(base));
+    expect(stored.status).toBe("PASS");
+    expect(stored.failures).toEqual([]);
+  });
+});
+
+describe("renderFailures — message text comes from validation.json", () => {
+  it("renders a stored failure's Thai message from the registry", () => {
+    const r = validateArticle({ ...base, title_th: base.title_en });
+    const text = renderFailures(toStoredRecord(r).failures);
+    expect(text).toBe(
+      "ชื่อเรื่องภาษาไทยเหมือนภาษาอังกฤษทุกตัวอักษร (ยังไม่ได้แปลชื่อเรื่อง)",
+    );
+    // finalize renders statusDesc through the same path
+    expect(text).toBe(r.statusDesc);
   });
 });

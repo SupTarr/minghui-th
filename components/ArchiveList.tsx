@@ -3,6 +3,13 @@
 import type { RefObject } from "react";
 import DateRangePicker from "@/components/DateRangePicker";
 import type { Article } from "@/components/types";
+import { renderFailures } from "@/lib/validationMessages";
+
+// Render a FAILED article's warning text from validation.json (the single
+// source of truth). The record stores only `failures`; text is rendered here.
+function failureText(a: Article): string {
+  return a.failures?.length ? renderFailures(a.failures) : "";
+}
 
 interface ArchiveListProps {
   startDate: string;
@@ -237,9 +244,9 @@ export default function ArchiveList({
                   <p className="text-3xs text-slate-500 font-sans line-clamp-1 mt-1.5 italic group-hover:text-slate-400 transition-colors">
                     {article.title_en}
                   </p>
-                  {article.status === "FAILED" && article.statusDesc && (
+                  {article.status === "FAILED" && failureText(article) && (
                     <p className="text-3xs text-red-300/80 font-sans line-clamp-2 mt-2 leading-relaxed">
-                      ⚠ {article.statusDesc}
+                      ⚠ {failureText(article)}
                     </p>
                   )}
                 </button>

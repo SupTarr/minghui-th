@@ -1,4 +1,5 @@
 import { google, drive_v3 } from "googleapis";
+import type { StoredFailure } from "./validationMessages.ts";
 
 const SCOPES = ["https://www.googleapis.com/auth/drive"];
 
@@ -455,11 +456,12 @@ export interface CatalogEntry {
   category?: string;
   subcategory?: string;
   filePath: string;
-  // Content-validation summary (full per-rule detail lives in the article JSON).
-  // Kept on the entry so the archive list / "Needs review" tab can filter
-  // straight from the per-day index without reading every article file.
+  // Content-validation summary. Kept on the entry so the archive list /
+  // "Needs review" tab can filter + render straight from the per-day index
+  // without reading every article file. `failures` holds only the fired-rule
+  // facts; the UI renders text from validation.json via renderFailures.
   status?: "PASS" | "FAILED";
-  statusDesc?: string;
+  failures?: StoredFailure[];
 }
 
 /**

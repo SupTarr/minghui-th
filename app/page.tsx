@@ -649,7 +649,7 @@ export default function Dashboard() {
           // Carry the validation flag so it rides into the per-day index and the
           // session's in-memory lists (powering the "Needs review" tab).
           status: saveData.entry?.status,
-          statusDesc: saveData.entry?.statusDesc,
+          failures: saveData.entry?.failures,
         };
 
         // Dedupe before prepending: re-syncing an article (e.g. after an index
@@ -849,7 +849,7 @@ export default function Dashboard() {
         subcategory: saveData.entry?.subcategory ?? transData.subcategory,
         filePath: saveData.filePath,
         status: saveData.entry?.status,
-        statusDesc: saveData.entry?.statusDesc,
+        failures: saveData.entry?.failures,
       };
 
       // Dedupe before prepending so re-importing the same URL can't double-insert
