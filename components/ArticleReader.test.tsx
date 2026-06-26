@@ -76,3 +76,48 @@ describe("renderInline — markup nested inside emphasis", () => {
     expect(joined).not.toContain(url);
   });
 });
+
+describe("renderInline — opposite-type emphasis nested in bold (lazy-balanced)", () => {
+  it("renders **bold *italic* bold** as <strong> wrapping <em>, with no literal *", () => {
+    // The trusted EN parser emits this for <strong>…<em>…</em>…</strong> (e.g.
+    // a bolded sentence quoting an italicised book title). The old no-star regex
+    // re-anchored on the inner stars and leaked the outer ** as literal text.
+    const { types, joined } = walk("**bold *it* bold**");
+    expect(types).toContain("strong");
+    expect(types).toContain("em");
+    expect(joined).toBe("bold it bold");
+    expect(joined).not.toContain("*"); // no leaked asterisks
+  });
+
+  it("renders an italicised link inside bold (**a *[t](url)* b**) fully", () => {
+    const url = "https://en.falundafa.org/eng/zfl_2014_9.html";
+    const { types, hrefs, joined } = walk(`**a *[Zhuan Falun](${url})* b**`);
+    expect(types).toContain("strong");
+    expect(types).toContain("em");
+    expect(types).toContain("a");
+    expect(hrefs).toContain(url);
+    expect(joined).toBe("a Zhuan Falun b");
+    expect(joined).not.toContain("*");
+    expect(joined).not.toContain("["); // no leaked markdown brackets
+    expect(joined).not.toContain(url);
+  });
+
+  it("still renders ***bold-italic*** wrapping a link (***[t](url)***)", () => {
+    const url = "https://en.falundafa.org/eng/hongyin.html";
+    const { types, hrefs, joined } = walk(`***[Hong Yin](${url})***`);
+    expect(types).toContain("strong");
+    expect(types).toContain("em");
+    expect(types).toContain("a");
+    expect(hrefs).toContain(url);
+    expect(joined).toContain("Hong Yin");
+  });
+
+  it("does not leak literal asterisks for *italic **bold** italic* (bold-in-italic)", () => {
+    // The flat regex can't fully resolve this rarer reverse-nesting (the inner
+    // bold renders as separate emphasis rather than nested <strong>), but the
+    // user-visible invariant — never show raw * — must hold.
+    const { joined } = walk("*a **b** c*");
+    expect(joined).toBe("a b c");
+    expect(joined).not.toContain("*");
+  });
+});

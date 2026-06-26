@@ -7,6 +7,11 @@ import {
   sourceBodyTextLength,
 } from "@/lib/parseArticle";
 import { validateArticle } from "@/lib/contentValidation";
+import {
+  ALLOWED_ARTICLE_HOST,
+  isAllowedArticleUrl,
+  parseTranslationResponse,
+} from "@/lib/apiValidation";
 
 export async function POST(req: Request) {
   try {
@@ -21,9 +26,12 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => null);
     const url = body?.url;
 
-    if (typeof url !== "string" || url.length === 0) {
+    // SSRF guard: only ever fetch an https://en.minghui.org article. Without this
+    // the server would fetch any pasted URL (e.g. http://169.254.169.254/… or an
+    // internal service). The client-side shape check is UX only, not a boundary.
+    if (!isAllowedArticleUrl(url)) {
       return NextResponse.json(
-        { error: "Missing or invalid article URL" },
+        { error: `Article URL must be an https://${ALLOWED_ARTICLE_HOST} link` },
         { status: 400 },
       );
     }
@@ -98,24 +106,16 @@ Article content: ${content_en}`;
     const result = await model.generateContent(prompt);
     const responseText = result.response.text();
 
-    let parsedTranslation: { title_th?: unknown; content_th?: unknown };
+    // Parse + shape-check the model reply (handles invalid JSON, a non-object
+    // like literal `null`, and missing string fields — see parseTranslationResponse).
+    // Log the raw text on failure for debugging, then let the route's catch 500 it.
+    let title_th: string;
+    let content_th: string;
     try {
-      parsedTranslation = JSON.parse(responseText);
-    } catch {
-      console.error("Failed to parse JSON response from Gemini:", responseText);
-      throw new Error("Gemini API did not return valid JSON translation.");
-    }
-
-    // responseMimeType only guarantees valid JSON, not the right shape — there's
-    // no responseSchema. Validate the keys exist as strings so a malformed model
-    // reply fails here (at the real cause) instead of returning a 200 with
-    // undefined fields that /api/save later rejects with a misleading 400.
-    const { title_th, content_th } = parsedTranslation;
-    if (typeof title_th !== "string" || typeof content_th !== "string") {
-      console.error("Gemini JSON missing title_th/content_th:", responseText);
-      throw new Error(
-        "Gemini translation is missing title_th/content_th string fields.",
-      );
+      ({ title_th, content_th } = parseTranslationResponse(responseText));
+    } catch (e) {
+      console.error("Invalid Gemini translation response:", responseText);
+      throw e;
     }
 
     // Deterministic completeness/correctness check before the article is saved.

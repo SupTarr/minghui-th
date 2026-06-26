@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { writeFile } from "@/lib/gdrive";
 import { authorize } from "@/lib/auth";
+import { isValidArticleDate, isHttpUrl } from "@/lib/apiValidation";
 
 export async function POST(req: Request) {
   try {
@@ -50,6 +51,23 @@ export async function POST(req: Request) {
           { status: 400 },
         );
       }
+    }
+
+    // Defense in depth: `date` becomes a Drive folder name and `url` is rendered
+    // as an <a href> in the reader, so pin both to safe shapes here rather than
+    // trusting the caller — a malformed date can't create an odd folder, and a
+    // non-http url (e.g. javascript:) can't be stored.
+    if (!isValidArticleDate(date)) {
+      return NextResponse.json(
+        { error: `Invalid date format (expected YYYY-MM-DD): ${date}` },
+        { status: 400 },
+      );
+    }
+    if (!isHttpUrl(url)) {
+      return NextResponse.json(
+        { error: "Article url must be an http(s) link" },
+        { status: 400 },
+      );
     }
 
     // 1. Extract article ID from URL (e.g., 234818 from .../234818.html)

@@ -42,6 +42,11 @@ const LEN_RATIO_MAX = 3.0;
 const COMPLETENESS_MIN = 0.6; // parsed-EN / source-body text ratio floor
 const MAX_CONTENT_CHARS = 100_000; // beyond this, content is abnormal — skip heavy regex
 const PATHOLOGICAL_RUN = /[[*]{200,}/; // 200+ consecutive [ or * → corrupt; avoids O(n^2) regex
+// A *consecutive*-run guard can't catch SPARSE adversarial markers ("[a[a[a…"),
+// which still drive the link/emphasis regex into O(n^2) backtracking. Cap the
+// TOTAL [/* count too (a linear char-class scan, no backtracking). Legitimate
+// articles carry well under this; thousands of unbalanced markers are corrupt.
+const MAX_INLINE_MARKERS = 4000;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -104,10 +109,17 @@ export interface SkelBlock {
 // Shared inline-markdown regex (the renderer imports createInlineRegex too)
 // ---------------------------------------------------------------------------
 
-// ***bold-italic*** | **bold** | *italic* | [text](http-url). The /g regex is
-// stateful (lastIndex), so every caller must get a fresh instance.
+// ***bold-italic*** | **bold** | *italic* | [text](http-url). Emphasis bodies use
+// LAZY balanced matches ([\s\S]+? / [^\n]+?) rather than a no-star class, so an
+// emphasis run may contain a nested opposite-type span — **bold *italic* bold**,
+// or an italicised link inside bold — with the outer marker capturing the whole
+// inner run and callers recursing into it. A no-star class would re-anchor on the
+// inner markers and leak the outer ** as literal asterisks. Capture-group order
+// (bold-italic, bold, italic, link-text, link-url) is unchanged, so collectInlines
+// / residueOf / renderInline keep working. The /g regex is stateful (lastIndex),
+// so every caller must get a fresh instance.
 export const INLINE_MD_PATTERN =
-  "\\*\\*\\*([^*]+)\\*\\*\\*|\\*\\*([^*]+)\\*\\*|\\*([^*\\n]+)\\*|\\[([^\\]]+)\\]\\((https?:\\/\\/[^)\\s]+)\\)";
+  "\\*\\*\\*([\\s\\S]+?)\\*\\*\\*|\\*\\*([\\s\\S]+?)\\*\\*|\\*([^\\n]+?)\\*|\\[([^\\]]+)\\]\\((https?:\\/\\/[^)\\s]+)\\)";
 
 export function createInlineRegex(): RegExp {
   return new RegExp(INLINE_MD_PATTERN, "g");
@@ -367,11 +379,15 @@ function runChecks(input: ValidateInput, now: string): ValidationResult {
     message: string,
   ) => checks.push({ id, severity, ok, message });
 
-  // Robustness: a long run of [ or * makes the inline regex O(n^2). Such runs
-  // never occur in legitimate content — flag as corrupt and skip heavy work.
+  // Robustness: many [ or * make the link/emphasis regex O(n^2). Guard BOTH a
+  // long *consecutive* run (PATHOLOGICAL_RUN) and the *total* marker count —
+  // sparse "[a[a…" evades the run check but still backtracks. Such volumes never
+  // occur in legitimate content — flag as corrupt and skip heavy work.
   if (
     en.length > MAX_CONTENT_CHARS ||
     th.length > MAX_CONTENT_CHARS ||
+    (en.match(/[[*]/g) || []).length > MAX_INLINE_MARKERS ||
+    (th.match(/[[*]/g) || []).length > MAX_INLINE_MARKERS ||
     PATHOLOGICAL_RUN.test(en) ||
     PATHOLOGICAL_RUN.test(th)
   ) {
