@@ -44,7 +44,14 @@ export default function Header({ googleIdToken, userEmail }: HeaderProps) {
 
         <div className="flex items-center gap-3">
           {googleIdToken ? (
-            <div className="hidden sm:flex items-center gap-2 bg-[#0c1220]/60 border border-slate-900 px-3.5 py-1.5 rounded-xl text-3xs font-mono">
+            // Distinct key from the sign-in branch: forces React to remount
+            // rather than reuse the node, so Google's imperatively-injected
+            // button (a child of #google-signin-btn) is torn out on login
+            // instead of lingering beside the email badge.
+            <div
+              key="account-badge"
+              className="hidden sm:flex items-center gap-2 bg-[#0c1220]/60 border border-slate-900 px-3.5 py-1.5 rounded-xl text-3xs font-mono"
+            >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-opacity" />
               <span className="text-slate-300 max-w-35 truncate">
                 {userEmail}
@@ -54,7 +61,11 @@ export default function Header({ googleIdToken, userEmail }: HeaderProps) {
             // Owner sign-in entry point. The admin workspace is hidden from
             // logged-out visitors, so this is the only place the Google button
             // renders; useGoogleAuth draws it into this container by id.
-            <div id="google-signin-btn" className="scale-90 origin-right" />
+            <div
+              key="signin-button"
+              id="google-signin-btn"
+              className="scale-90 origin-right"
+            />
           )}
         </div>
       </div>
