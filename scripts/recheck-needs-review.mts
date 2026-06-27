@@ -44,15 +44,28 @@ function initDrive(): drive_v3.Drive {
 const drive = initDrive();
 const DRIVE_ID = process.env.GOOGLE_DRIVE_ID || null;
 
-function listParams(q: string, fields: string): drive_v3.Params$Resource$Files$List {
+function listParams(
+  q: string,
+  fields: string,
+): drive_v3.Params$Resource$Files$List {
   const p: drive_v3.Params$Resource$Files$List = {
-    q, fields, supportsAllDrives: true, includeItemsFromAllDrives: true, pageSize: 1000,
+    q,
+    fields,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    pageSize: 1000,
   };
-  if (DRIVE_ID) { p.corpora = "drive"; p.driveId = DRIVE_ID; }
+  if (DRIVE_ID) {
+    p.corpora = "drive";
+    p.driveId = DRIVE_ID;
+  }
   return p;
 }
 
-async function listAll(q: string, fields: string): Promise<drive_v3.Schema$File[]> {
+async function listAll(
+  q: string,
+  fields: string,
+): Promise<drive_v3.Schema$File[]> {
   const out: drive_v3.Schema$File[] = [];
   let pageToken: string | undefined;
   do {
@@ -75,7 +88,8 @@ async function resolveRootId(): Promise<string> {
       `mimeType = 'application/vnd.google-apps.folder' and name = '${part}' and '${parent}' in parents and trashed = false`,
       "files(id)",
     );
-    if (!files.length) throw new Error(`Folder path segment not found: ${part}`);
+    if (!files.length)
+      throw new Error(`Folder path segment not found: ${part}`);
     parent = files[0].id as string;
   }
   return parent;
@@ -126,13 +140,14 @@ async function main() {
     const indexId = files.find((f) => f.name === "index.json")?.id;
     if (!indexId) continue;
     const data = await downloadJson(indexId as string).catch((e) => {
-      console.warn(`${date}: failed to read index.json (${(e as Error).message})`);
+      console.warn(
+        `${date}: failed to read index.json (${(e as Error).message})`,
+      );
       return null;
     });
     if (!Array.isArray(data)) continue;
     for (const entry of data as IndexEntry[]) {
-      if (entry.status === "FAILED")
-        failedInIndexes.push({ ...entry, date });
+      if (entry.status === "FAILED") failedInIndexes.push({ ...entry, date });
     }
   }
 
@@ -147,9 +162,13 @@ async function main() {
   console.log(`Date folders scanned:        ${dateFolders.length}`);
   console.log(`FAILED entries in day index: ${failedInIndexes.length}`);
   console.log(`Entries in needs-review.json: ${needsReview.length}`);
-  console.log(`\nMISSING (FAILED but not in needs-review.json): ${missing.length}`);
+  console.log(
+    `\nMISSING (FAILED but not in needs-review.json): ${missing.length}`,
+  );
   for (const e of missing) console.log(`  - ${e.date}  ${e.url}`);
-  console.log(`\nSTALE (in needs-review.json but no longer FAILED): ${stale.length}`);
+  console.log(
+    `\nSTALE (in needs-review.json but no longer FAILED): ${stale.length}`,
+  );
   for (const e of stale) console.log(`  - ${e.date ?? "?"}  ${e.url}`);
 
   if (missing.length || stale.length) {
@@ -161,4 +180,7 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error("Fatal:", e); process.exit(1); });
+main().catch((e) => {
+  console.error("Fatal:", e);
+  process.exit(1);
+});

@@ -96,7 +96,7 @@ export function cleanTitleText(raw: string): string {
     ["“", "”"], // “ ”
     ["‘", "’"], // ‘ ’
   ];
-  for (let peeled = true; peeled; ) {
+  for (let peeled = true; peeled;) {
     peeled = false;
     for (const [open, close] of quotePairs) {
       if (text.length >= 2 && text.startsWith(open) && text.endsWith(close)) {
