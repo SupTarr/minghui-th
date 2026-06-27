@@ -31,6 +31,7 @@ interface ArchiveListProps {
   onRetryArchive: () => void;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   openArticle: (path: string) => void;
+  isAuthed: boolean;
 }
 
 export default function ArchiveList({
@@ -53,6 +54,7 @@ export default function ArchiveList({
   onRetryArchive,
   scrollContainerRef,
   openArticle,
+  isAuthed,
 }: ArchiveListProps) {
   function goToPage(page: number) {
     setCurrentPage(page);
@@ -61,7 +63,11 @@ export default function ArchiveList({
   }
 
   return (
-    <section className="lg:col-span-6 flex flex-col space-y-4 lg:sticky lg:top-24 h-auto lg:h-[calc(100vh-140px)] min-h-125">
+    <section
+      className={`${
+        isAuthed ? "lg:col-span-6" : "lg:col-span-12"
+      } flex flex-col space-y-4 lg:sticky lg:top-24 h-auto lg:h-[calc(100vh-140px)] min-h-125`}
+    >
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xs font-bold uppercase tracking-widest text-teal-400 font-mono">
@@ -95,32 +101,39 @@ export default function ArchiveList({
           {startDate ? "ช่วงวันที่เลือก" : "7 วันล่าสุด"} (
           {archivedArticles.length})
         </button>
-        <button
-          type="button"
-          aria-pressed={activeTab === "newly-synced"}
-          onClick={() => setActiveTab("newly-synced")}
-          className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-            activeTab === "newly-synced"
-              ? "bg-[#14b8a6]/10 text-teal-400 font-bold border border-teal-500/15"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          แปลรอบนี้ ({newlySynced.length})
-        </button>
-        <button
-          type="button"
-          aria-pressed={activeTab === "needs-review"}
-          onClick={() => setActiveTab("needs-review")}
-          className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-            activeTab === "needs-review"
-              ? "bg-red-500/10 text-red-300 font-bold border border-red-500/20"
-              : needsReview.length > 0
-                ? "text-red-300/80 hover:text-red-200"
-                : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          ต้องตรวจสอบ ({needsReview.length})
-        </button>
+        {/* Operator-only views — hidden from logged-out visitors (and so is the
+            sync that fills them). The clamp in app/page.tsx keeps a signed-out
+            session on "archived". */}
+        {isAuthed && (
+          <>
+            <button
+              type="button"
+              aria-pressed={activeTab === "newly-synced"}
+              onClick={() => setActiveTab("newly-synced")}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                activeTab === "newly-synced"
+                  ? "bg-[#14b8a6]/10 text-teal-400 font-bold border border-teal-500/15"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              แปลรอบนี้ ({newlySynced.length})
+            </button>
+            <button
+              type="button"
+              aria-pressed={activeTab === "needs-review"}
+              onClick={() => setActiveTab("needs-review")}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                activeTab === "needs-review"
+                  ? "bg-red-500/10 text-red-300 font-bold border border-red-500/20"
+                  : needsReview.length > 0
+                    ? "text-red-300/80 hover:text-red-200"
+                    : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              ต้องตรวจสอบ ({needsReview.length})
+            </button>
+          </>
+        )}
       </div>
 
       <div
