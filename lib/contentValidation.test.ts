@@ -308,7 +308,8 @@ describe("validateArticle — severe truncation (Gemini early-STOP)", () => {
     const r = validateArticle({
       title_en: "Note",
       title_th: "บันทึก",
-      content_en: "A practitioner shares a brief reflection on her cultivation.",
+      content_en:
+        "A practitioner shares a brief reflection on her cultivation.",
       content_th: "ผู้ฝึกคนหนึ่งแบ่งปันข้อคิดสั้นๆ เกี่ยวกับการบำเพ็ญของเธอ",
     });
     expect(failed("severe_truncation", r)).toBeFalsy();

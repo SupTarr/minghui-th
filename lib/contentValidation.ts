@@ -190,16 +190,7 @@ export interface ValidateInput {
 }
 
 export type BlockType =
-  | "h1"
-  | "h2"
-  | "h3"
-  | "h4"
-  | "quote"
-  | "list"
-  | "code"
-  | "hr"
-  | "image"
-  | "p";
+  "h1" | "h2" | "h3" | "h4" | "quote" | "list" | "code" | "hr" | "image" | "p";
 
 export type InlineKind = "bold" | "italic" | "bolditalic" | "link";
 
