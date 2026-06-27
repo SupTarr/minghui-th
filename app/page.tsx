@@ -177,6 +177,15 @@ export default function Dashboard() {
   }
 
   const { googleIdToken, userEmail, handleSignOut } = useGoogleAuth(addLog);
+
+  // Logged-out visitors only get the "Archived" tab — the operator-only tabs are
+  // hidden. If an admin selected one of those then signed out, snap back so the
+  // list isn't stranded on a now-hidden view. Done during render (mirroring the
+  // page clamp above) so it applies before paint.
+  if (!googleIdToken && activeTab !== "archived") {
+    setActiveTab("archived");
+  }
+
   const {
     readingArticlePath,
     articleContent,
@@ -707,37 +716,44 @@ export default function Dashboard() {
             }
             scrollContainerRef={scrollContainerRef}
             openArticle={openArticle}
+            isAuthed={Boolean(googleIdToken)}
           />
 
-          <SyncConsole
-            archivedCount={archivedArticles.length}
-            newlyCount={newlySynced.length}
-            hasDateFilter={Boolean(startDate)}
-            logs={logs}
-            statusMessage={statusMessage}
-            progressPercent={progressPercent}
-            isSyncing={isSyncing}
-            logEndRef={logEndRef}
-          />
+          {/* The sync console + control panel are operator tooling — they mount
+              only when an allowed admin is signed in. Logged-out visitors see just
+              the (full-width) archive; they sign in from the header. */}
+          {googleIdToken && (
+            <>
+              <SyncConsole
+                archivedCount={archivedArticles.length}
+                newlyCount={newlySynced.length}
+                hasDateFilter={Boolean(startDate)}
+                logs={logs}
+                statusMessage={statusMessage}
+                progressPercent={progressPercent}
+                isSyncing={isSyncing}
+                logEndRef={logEndRef}
+              />
 
-          <SyncControls
-            isSyncing={isSyncing}
-            progressPercent={progressPercent}
-            startDate={startDate}
-            setStartDate={setStartDate}
-            endDate={endDate}
-            setEndDate={setEndDate}
-            googleIdToken={googleIdToken}
-            userEmail={userEmail}
-            isCancelling={isCancelling}
-            handleSync={handleSync}
-            handleCancel={handleCancel}
-            handleSignOut={handleSignOut}
-            importUrl={importUrl}
-            setImportUrl={setImportUrl}
-            isImporting={isImporting}
-            handleImportUrl={handleImportUrl}
-          />
+              <SyncControls
+                isSyncing={isSyncing}
+                progressPercent={progressPercent}
+                startDate={startDate}
+                setStartDate={setStartDate}
+                endDate={endDate}
+                setEndDate={setEndDate}
+                userEmail={userEmail}
+                isCancelling={isCancelling}
+                handleSync={handleSync}
+                handleCancel={handleCancel}
+                handleSignOut={handleSignOut}
+                importUrl={importUrl}
+                setImportUrl={setImportUrl}
+                isImporting={isImporting}
+                handleImportUrl={handleImportUrl}
+              />
+            </>
+          )}
         </div>
       </main>
 

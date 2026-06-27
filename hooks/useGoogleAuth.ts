@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface GoogleCredentialResponse {
   credential?: string;
@@ -43,6 +43,10 @@ function isTokenExpired(idToken: string): boolean {
 export function useGoogleAuth(addLog: (message: string) => void) {
   const [googleIdToken, setGoogleIdToken] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  // GIS readiness + a handle to the loaded API, so the sign-in button can be
+  // (re)rendered after sign-out — not just once on mount (see the effect below).
+  const [gisReady, setGisReady] = useState(false);
+  const googleApiRef = useRef<WindowWithGoogle["google"] | null>(null);
 
   // Stable (useCallback) so the mount-only bootstrap effect below can depend on
   // handleGoogleLoginResponse without re-injecting the Google SDK each render.
@@ -144,20 +148,31 @@ export function useGoogleAuth(addLog: (message: string) => void) {
                 client_id: data.clientId,
                 callback: handleGoogleLoginResponse,
               });
-
-              const btn = document.getElementById("google-signin-btn");
-              if (btn) {
-                google.accounts.id.renderButton(btn, {
-                  theme: "outline",
-                  size: "large",
-                });
-              }
+              // Stash the API and flag readiness; the button itself is drawn by the
+              // effect below so it can be re-rendered after sign-out, not only here.
+              googleApiRef.current = google;
+              setGisReady(true);
             }
           };
         }
       })
       .catch((err) => console.error("Failed to load auth config:", err));
   }, [handleGoogleLoginResponse]);
+
+  // Draw the Google button whenever we're signed out and GIS is ready. Keyed on
+  // googleIdToken so signing out (token → null) re-renders it into the freshly
+  // mounted container: renderButton is imperative and one-shot, so a mount-only
+  // render would leave the button blank after the first sign-out.
+  useEffect(() => {
+    if (!gisReady || googleIdToken) return;
+    const btn = document.getElementById("google-signin-btn");
+    if (!btn) return;
+    btn.innerHTML = "";
+    googleApiRef.current?.accounts.id.renderButton(btn, {
+      theme: "outline",
+      size: "large",
+    });
+  }, [gisReady, googleIdToken]);
 
   return { googleIdToken, userEmail, handleSignOut };
 }
