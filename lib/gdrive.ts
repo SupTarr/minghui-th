@@ -162,7 +162,11 @@ async function resolvePathToId(
   path: string,
 ): Promise<string> {
   const parts = path.split("/").filter((p) => p.length > 0);
-  let currentParentId = "root";
+  // "root" is the *authenticated identity's* My Drive. On a shared drive that
+  // alias matches nothing, so every lookup would miss and the whole chain would
+  // be silently re-created in the wrong drive — anchor at the shared drive's
+  // own root instead (its root folder ID equals the drive ID).
+  let currentParentId = process.env.GOOGLE_DRIVE_ID || "root";
 
   for (const part of parts) {
     const query = `mimeType = 'application/vnd.google-apps.folder' and name = '${escapeDriveQueryValue(part)}' and '${currentParentId}' in parents and trashed = false`;
