@@ -40,16 +40,22 @@ const ARTICLE_TIMEOUT_MS = 85_000;
 
 type ArticleResult = { url: string; filePath: string; entry: Article };
 
+// Reject after `ms`, ALSO aborting `controller`. The rejected processArticle
+// keeps running in the background (the in-process Gemini call can't be
+// cancelled), but it checks the signal before its save — otherwise a late
+// finisher could land its file AFTER the chunk's index write and leave a
+// saved-but-unindexed orphan that the next run pays a full re-translation for.
 function withTimeout<T>(
   promise: Promise<T>,
   ms: number,
   label: string,
+  controller: AbortController,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(`Timed out after ${ms}ms: ${label}`)),
-      ms,
-    );
+    const timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`Timed out after ${ms}ms: ${label}`));
+    }, ms);
     promise.then(
       (value) => {
         clearTimeout(timer);
@@ -69,6 +75,7 @@ async function processArticle(
   origin: string,
   article: ScrapedArticle,
   headers: Headers,
+  signal: AbortSignal,
 ): Promise<ArticleResult | null> {
   try {
     const translateReq = new Request(`${origin}/api/translate`, {
@@ -82,6 +89,13 @@ async function processArticle(
       return null;
     }
     const translation = await translateRes.json();
+
+    // The timeout usually fires during the translate (the long pole). Bail
+    // BEFORE the save: this result has already been discarded upstream, so
+    // writing the file now would orphan it (saved but never indexed). A small
+    // window remains if the abort lands mid-save, but save is seconds, not the
+    // minute translate can take.
+    if (signal.aborted) return null;
 
     const saveReq = new Request(`${origin}/api/save`, {
       method: "POST",
@@ -173,16 +187,18 @@ async function runPipeline(origin: string, incomingHeaders: Headers) {
     );
 
     const results = await Promise.all(
-      chunk.map((article) =>
-        withTimeout(
-          processArticle(origin, article, headers),
+      chunk.map((article) => {
+        const controller = new AbortController();
+        return withTimeout(
+          processArticle(origin, article, headers, controller.signal),
           ARTICLE_TIMEOUT_MS,
           article.url,
+          controller,
         ).catch((err) => {
           console.error(`Article failed/timed out: ${article.url}`, err);
           return null;
-        }),
-      ),
+        });
+      }),
     );
     const done = results.filter((r): r is ArticleResult => r !== null);
 
