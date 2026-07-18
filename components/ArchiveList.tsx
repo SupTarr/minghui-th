@@ -98,8 +98,7 @@ export default function ArchiveList({
               : "text-slate-400 hover:text-slate-200"
           }`}
         >
-          {startDate ? "ช่วงวันที่เลือก" : "7 วันล่าสุด"} (
-          {archivedArticles.length})
+          ช่วงวันที่เลือก ({archivedArticles.length})
         </button>
         {/* Operator-only views — hidden from logged-out visitors (and so is the
             sync that fills them). The clamp in app/page.tsx keeps a signed-out
@@ -182,9 +181,7 @@ export default function ArchiveList({
         ) : activeTab === "archived" && archivedArticles.length === 0 ? (
           <div className="h-50 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-900 rounded-2xl text-slate-500">
             <span className="text-xs font-sans">
-              {startDate
-                ? "ไม่พบบทความสำหรับช่วงวันที่ระบุ"
-                : "ไม่พบบทความในช่วง 7 วันล่าสุด — เลือกวันที่เพื่อดูย้อนหลัง"}
+              ไม่พบบทความสำหรับช่วงวันที่ระบุ — เลือกวันที่เพื่อดูย้อนหลัง
             </span>
           </div>
         ) : activeTab === "newly-synced" && newlySynced.length === 0 ? (

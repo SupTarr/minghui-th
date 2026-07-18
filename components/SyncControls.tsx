@@ -127,54 +127,72 @@ export default function SyncControls({
                 placeholder="https://en.minghui.org/html/articles/..."
                 className="w-full bg-[#060913] border border-slate-900 rounded-xl px-4 py-2.5 text-xs text-slate-300 placeholder:text-slate-600 hover:border-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-mono"
               />
-              <button
-                type="button"
-                onClick={handleImportUrl}
-                disabled={isImporting || isSyncing || !importUrl.trim()}
-                className="w-full py-2.5 px-4 rounded-xl font-bold text-xs shadow-lg transition-all duration-300 flex items-center justify-center gap-2 bg-indigo-500 text-white hover:bg-indigo-400 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-indigo-500/15 font-sans disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-              >
-                {isImporting ? (
-                  <>
-                    <svg
-                      className="animate-spin h-4 w-4 text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
+              <div className="flex gap-2 w-full">
+                <button
+                  type="button"
+                  onClick={handleImportUrl}
+                  disabled={isImporting || isSyncing || !importUrl.trim()}
+                  className="flex-1 py-2.5 px-4 rounded-xl font-bold text-xs shadow-lg transition-all duration-300 flex items-center justify-center gap-2 bg-indigo-500 text-white hover:bg-indigo-400 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-indigo-500/15 font-sans disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                >
+                  {isImporting ? (
+                    <>
+                      <svg
+                        className="animate-spin h-4 w-4 text-white"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
+                      </svg>
+                      กำลังนำเข้า...
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
                         stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    กำลังนำเข้า...
-                  </>
-                ) : (
-                  <>
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.2"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 4.5v15m7.5-7.5h-15"
-                      />
-                    </svg>
-                    นำเข้าบทความ
-                  </>
+                        strokeWidth="2.2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M12 4.5v15m7.5-7.5h-15"
+                        />
+                      </svg>
+                      นำเข้าบทความ
+                    </>
+                  )}
+                </button>
+                {/* The import runs on an AbortController just like the sync, so
+                  offer the same cancel affordance while it's in flight. */}
+                {isImporting && (
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    disabled={isCancelling}
+                    className={`px-4 py-2.5 rounded-xl font-bold text-xs border transition-all duration-300 active:scale-95 cursor-pointer font-sans ${
+                      isCancelling
+                        ? "bg-rose-500/10 border-rose-500/20 text-rose-500/40 cursor-not-allowed"
+                        : "bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/20 text-rose-400 hover:text-rose-200"
+                    }`}
+                  >
+                    {isCancelling ? "รอยกเลิก..." : "ยกเลิก"}
+                  </button>
                 )}
-              </button>
+              </div>
             </div>
 
             {/* Divider between single-article import and the full sync */}

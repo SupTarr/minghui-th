@@ -12,12 +12,16 @@ import { useGoogleAuth } from "@/hooks/useGoogleAuth";
 import { useArticleReader } from "@/hooks/useArticleReader";
 
 // Prepend a freshly synced/imported article, dropping any prior copy with the
-// same filePath or url so re-running can't insert a duplicate React key.
+// same filePath or url so re-running can't insert a duplicate React key. Two
+// entries can lack a filePath (a malformed save response); they are only the
+// same article when their urls match, so a missing filePath never matches.
 function prependArticle(article: Article, prev: Article[]): Article[] {
   return [
     article,
     ...prev.filter(
-      (a) => a.filePath !== article.filePath && a.url !== article.url,
+      (a) =>
+        a.url !== article.url &&
+        (!a.filePath || a.filePath !== article.filePath),
     ),
   ];
 }
@@ -201,27 +205,18 @@ export default function Dashboard() {
 
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetches the archive for a date range. With no date, loads the last 7 days;
-  // with a date, loads just that day. The catalog is date-partitioned, so the
-  // server only reads the relevant per-day indexes (never the whole archive).
+  // Fetches the archive for the [start, end] date range (end defaults to start
+  // for a single-day pick — startDate always holds a date, initialized to the
+  // last-7-days window). The catalog is date-partitioned, so the server only
+  // reads the relevant per-day indexes (never the whole archive).
   const fetchArchivedArticles = useCallback(
-    async (start?: string, end?: string, signal?: AbortSignal) => {
+    async (start: string, end?: string, signal?: AbortSignal) => {
       try {
         setLoadingInitial(true);
         setArchiveError(false);
 
-        let from: string;
-        let to: string;
-        if (start) {
-          from = start;
-          to = end || start;
-        } else {
-          const today = new Date();
-          const past = new Date();
-          past.setDate(today.getDate() - 6);
-          to = toYMD(today);
-          from = toYMD(past);
-        }
+        const from = start;
+        const to = end || start;
 
         const res = await fetch(`/api/articles?from=${from}&to=${to}`, {
           signal,
@@ -259,11 +254,7 @@ export default function Dashboard() {
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      fetchArchivedArticles(
-        startDate || undefined,
-        endDate || undefined,
-        controller.signal,
-      );
+      fetchArchivedArticles(startDate, endDate || undefined, controller.signal);
     }, 0);
     return () => {
       clearTimeout(timer);
@@ -316,16 +307,15 @@ export default function Dashboard() {
       const scrapeData = await scrapeRes.json();
       let newArticles = scrapeData.articles || [];
 
-      if (startDate) {
-        const end = endDate || startDate;
-        newArticles = newArticles.filter(
-          (article: Article) =>
-            article.date >= startDate && article.date <= end,
-        );
-        addLog(
-          `กรองตามช่วงวันที่เลือก: ${startDate} - ${end} (พบบทความใหม่ ${newArticles.length} รายการหลังจากกรอง)`,
-        );
-      }
+      // startDate always holds a date (initialized to the 7-day window), so the
+      // scraped batch is always range-filtered.
+      const end = endDate || startDate;
+      newArticles = newArticles.filter(
+        (article: Article) => article.date >= startDate && article.date <= end,
+      );
+      addLog(
+        `กรองตามช่วงวันที่เลือก: ${startDate} - ${end} (พบบทความใหม่ ${newArticles.length} รายการหลังจากกรอง)`,
+      );
 
       setNewCount(newArticles.length);
       addLog(`ตรวจสอบเสร็จสิ้น: พบบทความใหม่ ${newArticles.length} รายการ`);
@@ -527,6 +517,13 @@ export default function Dashboard() {
 
     setIsImporting(true);
     setActiveTab("newly-synced");
+    isCancelledRef.current = false;
+    setIsCancelling(false);
+
+    // Same cancel wiring as handleSync: the shared cancel button aborts this
+    // controller, so a hung translate/save can be bailed out of mid-import.
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     try {
       addLog(`กำลังนำเข้าบทความจากลิงก์: ${url}`);
@@ -543,6 +540,7 @@ export default function Dashboard() {
           "X-Google-ID-Token": googleIdToken || "",
         },
         body: JSON.stringify({ url }),
+        signal: controller.signal,
       });
       if (transRes.status === 401 || transRes.status === 403) {
         throw new Error(`Unauthorized:${transRes.status}`);
@@ -583,6 +581,7 @@ export default function Dashboard() {
           subcategory: transData.subcategory,
           validation: transData.validation,
         }),
+        signal: controller.signal,
       });
       if (saveRes.status === 401 || saveRes.status === 403) {
         throw new Error(`Unauthorized:${saveRes.status}`);
@@ -620,9 +619,15 @@ export default function Dashboard() {
       // Write the per-day index entry. A failed index write only costs a
       // re-translation on the next sync (dedup self-heals), so warn and continue.
       try {
-        await writeIndexEntry(importedArticle, { token: googleIdToken || "" });
+        await writeIndexEntry(importedArticle, {
+          token: googleIdToken || "",
+          signal: controller.signal,
+        });
         addLog("🗂️ อัปเดตดัชนีคลังบทความแล้ว");
       } catch (e) {
+        if (isCancelledRef.current) {
+          throw new DOMException("Aborted by user", "AbortError");
+        }
         const msg = e instanceof Error ? e.message : String(e);
         addLog(
           `⚠️ อัปเดตดัชนีคลังล้มเหลว (${msg}) — บทความถูกบันทึกแล้ว ระบบจะเพิ่มลงดัชนีอัตโนมัติในการซิงค์ครั้งถัดไป`,
@@ -634,18 +639,25 @@ export default function Dashboard() {
       setImportUrl("");
     } catch (error) {
       const err = error as Error;
-      console.error(err);
-      const authMatch = err.message?.match(/Unauthorized:(\d+)/);
-      if (authMatch) {
-        const { log, status } = authErrorMessages(authMatch[1], userEmail);
-        addLog(log);
-        setStatusMessage(status);
+      if (err.name === "AbortError" || isCancelledRef.current) {
+        addLog("🛑 กระบวนการถูกยกเลิกโดยผู้ใช้");
+        setStatusMessage("ยกเลิกการนำเข้าเรียบร้อยแล้ว");
       } else {
-        setStatusMessage("เกิดข้อผิดพลาดในการนำเข้าบทความ");
-        addLog(`❌ ข้อผิดพลาด: ${err.message || String(err)}`);
+        console.error(err);
+        const authMatch = err.message?.match(/Unauthorized:(\d+)/);
+        if (authMatch) {
+          const { log, status } = authErrorMessages(authMatch[1], userEmail);
+          addLog(log);
+          setStatusMessage(status);
+        } else {
+          setStatusMessage("เกิดข้อผิดพลาดในการนำเข้าบทความ");
+          addLog(`❌ ข้อผิดพลาด: ${err.message || String(err)}`);
+        }
       }
     } finally {
       setIsImporting(false);
+      setIsCancelling(false);
+      abortControllerRef.current = null;
     }
   }
 
@@ -709,10 +721,7 @@ export default function Dashboard() {
             loadingInitial={loadingInitial}
             archiveError={archiveError}
             onRetryArchive={() =>
-              fetchArchivedArticles(
-                startDate || undefined,
-                endDate || undefined,
-              )
+              fetchArchivedArticles(startDate, endDate || undefined)
             }
             scrollContainerRef={scrollContainerRef}
             openArticle={openArticle}
@@ -727,7 +736,6 @@ export default function Dashboard() {
               <SyncConsole
                 archivedCount={archivedArticles.length}
                 newlyCount={newlySynced.length}
-                hasDateFilter={Boolean(startDate)}
                 logs={logs}
                 statusMessage={statusMessage}
                 progressPercent={progressPercent}

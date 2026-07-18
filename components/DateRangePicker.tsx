@@ -41,7 +41,7 @@ export default function DateRangePicker({
 
   const toggleCalendar = () => {
     if (disabled) return;
-    if (!showCalendar && startDate) {
+    if (!showCalendar) {
       const [y, m, d] = startDate.split("-").map(Number);
       setViewDate(new Date(y, m - 1, d));
     }
@@ -81,14 +81,14 @@ export default function DateRangePicker({
   const daysOfWeek = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 
   function formatThaiDateShort(dateStr: string) {
-    if (!dateStr) return "ทั้งหมด (กรองตามวันที่)";
     const [y, m, d] = dateStr.split("-");
     const month = shortMonthNames[parseInt(m) - 1];
     return `${parseInt(d)} ${month} ${y}`;
   }
 
+  // startDate always holds a date (the dashboard initializes it to the 7-day
+  // window), so there is no "no filter" state to label.
   function formatThaiDateRange(startStr: string, endStr: string) {
-    if (!startStr) return "ทั้งหมด (ไม่มีกรอง)";
     const end = endStr || startStr;
     if (startStr === end) {
       return formatThaiDateShort(startStr);
@@ -170,11 +170,7 @@ export default function DateRangePicker({
     }
   };
 
-  const triggerText = startDate
-    ? formatThaiDateRange(startDate, endDate)
-    : size === "sm"
-      ? "ทั้งหมด (ไม่มีกรอง)"
-      : "ดึงทั้งหมด (ไม่มีกรอง)";
+  const triggerText = formatThaiDateRange(startDate, endDate);
 
   return (
     <div className="relative w-full" ref={calendarRef}>
@@ -236,15 +232,7 @@ export default function DateRangePicker({
                 d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
               />
             </svg>
-            <span
-              className={
-                startDate
-                  ? "text-teal-400 font-semibold"
-                  : "text-slate-500 font-medium"
-              }
-            >
-              {triggerText}
-            </span>
+            <span className="text-teal-400 font-semibold">{triggerText}</span>
           </div>
           <svg
             className={`w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 transition-transform duration-200 ${showCalendar ? "rotate-180" : ""}`}

@@ -56,7 +56,6 @@ function formatLogLine(log: string) {
 interface SyncConsoleProps {
   archivedCount: number;
   newlyCount: number;
-  hasDateFilter: boolean;
   logs: string[];
   statusMessage: string;
   progressPercent: number;
@@ -67,7 +66,6 @@ interface SyncConsoleProps {
 export default function SyncConsole({
   archivedCount,
   newlyCount,
-  hasDateFilter,
   logs,
   statusMessage,
   progressPercent,
@@ -95,7 +93,7 @@ export default function SyncConsole({
             {archivedCount}
           </p>
           <span className="text-4xs text-slate-500 font-sans mt-0.5 block leading-none">
-            {hasDateFilter ? "ในช่วงที่เลือก" : "ใน 7 วันล่าสุด"}
+            ในช่วงที่เลือก
           </span>
         </div>
         <div className="p-3 rounded-xl bg-[#0c1220]/20 border border-slate-900 backdrop-blur-xs">
