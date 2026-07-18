@@ -32,6 +32,14 @@ export async function verifyGoogleToken(
       return null;
     }
 
+    // Only accept verified emails (tokeninfo reports the flag as the STRING
+    // "true"): an unverified address could otherwise impersonate an
+    // allow-listed mailbox.
+    if (data.email_verified !== "true" && data.email_verified !== true) {
+      console.error(`Token email not verified: ${data.email}`);
+      return null;
+    }
+
     return data.email || null;
   } catch (e) {
     console.error("Error verifying Google ID token:", e);

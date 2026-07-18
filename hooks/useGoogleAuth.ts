@@ -23,10 +23,25 @@ interface WindowWithGoogle extends Window {
   };
 }
 
+// Decode a JWT's payload segment. JWT segments are base64url (RFC 7515) — the
+// alphabet uses "-"/"_", which browser atob rejects outright — so translate to
+// standard base64 and re-pad before decoding. Plain-ASCII payloads often contain
+// neither character (why raw atob seemed to work), but any non-ASCII byte in the
+// payload (e.g. a Thai profile name) produces them and would break login.
+// Only ASCII fields (email, exp) are read from the result — atob yields latin1,
+// so non-ASCII values like a Thai `name` come out mojibake, which is fine here.
+// Exported for focused tests.
+export function decodeJwtPayload(idToken: string): Record<string, unknown> {
+  const seg = idToken.split(".")[1] ?? "";
+  const b64 = seg.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+  return JSON.parse(atob(padded));
+}
+
 // Returns true if a Google ID token (JWT) is missing, malformed, or past its exp.
 function isTokenExpired(idToken: string): boolean {
   try {
-    const payload = JSON.parse(atob(idToken.split(".")[1]));
+    const payload = decodeJwtPayload(idToken);
     if (typeof payload.exp !== "number") return true;
     return Date.now() >= payload.exp * 1000;
   } catch {
@@ -64,8 +79,8 @@ export function useGoogleAuth(addLog: (message: string) => void) {
 
       let email: string | null = null;
       try {
-        const payload = JSON.parse(atob(idToken.split(".")[1]));
-        email = payload.email ?? null;
+        const payload = decodeJwtPayload(idToken);
+        email = typeof payload.email === "string" ? payload.email : null;
       } catch (e) {
         console.error("Failed to parse ID token payload", e);
         return;
@@ -125,6 +140,21 @@ export function useGoogleAuth(addLog: (message: string) => void) {
         setGoogleIdToken(token);
         setUserEmail(email);
       }, 0);
+      // Re-check the allow-list server-side: the local `exp` check can't see a
+      // revoked email, which would otherwise keep the operator UI up until some
+      // later call 403s. Only an explicit rejection signs out — a network error
+      // keeps the session (the account wasn't rejected, and every real action
+      // re-authorizes anyway).
+      fetch("/api/auth/verify", { headers: { "X-Google-ID-Token": token } })
+        .then((res) => {
+          if (res.status === 401 || res.status === 403) {
+            addLog(
+              "❌ เซสชันเดิมไม่ได้รับอนุญาตแล้ว — กรุณาเข้าสู่ระบบใหม่อีกครั้ง",
+            );
+            handleSignOut();
+          }
+        })
+        .catch(() => {});
     } else {
       // Stale or timed-out session: drop it so the email isn't shown.
       localStorage.removeItem("google_id_token");
@@ -157,7 +187,7 @@ export function useGoogleAuth(addLog: (message: string) => void) {
         }
       })
       .catch((err) => console.error("Failed to load auth config:", err));
-  }, [handleGoogleLoginResponse]);
+  }, [addLog, handleGoogleLoginResponse, handleSignOut]);
 
   // Draw the Google button whenever we're signed out and GIS is ready. Keyed on
   // googleIdToken so signing out (token → null) re-renders it into the freshly
