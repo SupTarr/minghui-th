@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { writeFile, type Article } from "@/lib/gdrive";
+import { revalidateTag } from "next/cache";
+import { writeFile, ARTICLE_CONTENT_TAG, type Article } from "@/lib/gdrive";
 import type { ArticleDetails } from "@/components/types";
 import { authorize } from "@/lib/auth";
 import { isValidArticleDate, isHttpUrl } from "@/lib/apiValidation";
@@ -123,6 +124,14 @@ export async function POST(req: Request) {
 
     // 3. Write individual article JSON to Drive folder
     await writeFile(folderName, fileName, articlePayload);
+
+    // A save can OVERWRITE an existing file — re-importing a FAILED article is
+    // the intended repair flow — so "content is immutable" doesn't hold across a
+    // repair. Expire the content cache immediately or /api/article keeps serving
+    // the old body for up to an hour. The tag is shared by all articles, so this
+    // costs a Drive re-read per recently-viewed article after a sync; correctness
+    // over that small cost.
+    revalidateTag(ARTICLE_CONTENT_TAG, { expire: 0 });
 
     // 4. Return the catalog entry. The index.json isn't written here; the caller
     // posts this entry to /api/index right after the save succeeds, so each

@@ -10,10 +10,21 @@ export const dynamic = "force-dynamic";
 // used to traverse the folder tree or smuggle characters toward the Drive query.
 const ARTICLE_PATH_RE = /^\/\d{4}-\d{2}-\d{2}\/\d+\.json$/;
 
-// Article content is immutable once saved, so cache it aggressively keyed by
-// filePath, under its own tag so routine syncs don't purge it.
+// Article content changes only on a repair re-save (which expires the tag), so
+// cache it aggressively keyed by filePath, under its own tag so routine syncs
+// don't purge it.
+//
+// A miss must NOT be cached: the article may be saved moments later (e.g. a
+// share link opened mid-sync), and a cached null would serve 404 for an hour.
+// unstable_cache never caches a thrown error, so signal the miss by throwing
+// this marker and map it back to a 404 in the handler.
+const ARTICLE_NOT_FOUND = "ARTICLE_NOT_FOUND";
 const readArticleCached = unstable_cache(
-  (filePath: string) => readFileAtPath(filePath),
+  async (filePath: string) => {
+    const content = await readFileAtPath(filePath);
+    if (content === null) throw new Error(ARTICLE_NOT_FOUND);
+    return content;
+  },
   ["article-content"],
   { tags: [ARTICLE_CONTENT_TAG], revalidate: 3600 },
 );
@@ -37,12 +48,17 @@ export async function GET(req: Request) {
       );
     }
 
-    const content = await readArticleCached(filePath);
-    if (!content) {
-      return NextResponse.json(
-        { error: `Article at path "${filePath}" not found` },
-        { status: 404 },
-      );
+    let content: unknown;
+    try {
+      content = await readArticleCached(filePath);
+    } catch (e) {
+      if ((e as Error)?.message === ARTICLE_NOT_FOUND) {
+        return NextResponse.json(
+          { error: `Article at path "${filePath}" not found` },
+          { status: 404 },
+        );
+      }
+      throw e;
     }
 
     return NextResponse.json(content, {
