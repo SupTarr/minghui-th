@@ -72,6 +72,7 @@ export default function Dashboard() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [importUrl, setImportUrl] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+  const [isRevalidating, setIsRevalidating] = useState(false);
   const [newCount, setNewCount] = useState<number | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [progressPercent, setProgressPercent] = useState(0);
@@ -268,7 +269,7 @@ export default function Dashboard() {
   }, [logs]);
 
   async function handleSync() {
-    if (isSyncing || isImporting) return;
+    if (isSyncing || isImporting || isRevalidating) return;
 
     setIsSyncing(true);
     isCancelledRef.current = false;
@@ -500,7 +501,7 @@ export default function Dashboard() {
   // Import a single article by its URL — one handleSync iteration without the
   // scrape: translate → save → index, then surface it like a synced article.
   async function handleImportUrl() {
-    if (isImporting || isSyncing) return;
+    if (isImporting || isSyncing || isRevalidating) return;
 
     const url = importUrl.trim();
     if (!url) return;
@@ -661,6 +662,153 @@ export default function Dashboard() {
     }
   }
 
+  // Web replacement for scripts/backfill-validation.mts: walk every archive day
+  // through /api/revalidate (the server re-checks + repairs one day per call, so
+  // the loop is cancellable and never hits the per-invocation cap), then rebuild
+  // needs-review.json from the accumulated failures. The rebuild is an
+  // authoritative OVERWRITE, so it only runs after a complete pass — a partial
+  // accumulation (a day errored, or the run was cancelled) would silently drop
+  // that day's failures from the "Needs review" tab.
+  async function handleRevalidate() {
+    if (isSyncing || isImporting || isRevalidating) return;
+
+    setIsRevalidating(true);
+    isCancelledRef.current = false;
+    setIsCancelling(false);
+    setLogs([]);
+    setProgressPercent(0);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      addLog("เริ่มตรวจสอบความถูกต้องของบทความทั้งคลัง...");
+      setStatusMessage("กำลังโหลดรายการวันที่ในคลัง...");
+
+      const listRes = await fetch("/api/revalidate", {
+        headers: { "X-Google-ID-Token": googleIdToken || "" },
+        signal: controller.signal,
+      });
+      if (listRes.status === 401 || listRes.status === 403) {
+        throw new Error(`Unauthorized:${listRes.status}`);
+      }
+      if (!listRes.ok) {
+        throw new Error(`โหลดรายการวันที่ไม่สำเร็จ (สถานะ ${listRes.status})`);
+      }
+      const listData = await listRes.json();
+      const dates: string[] = Array.isArray(listData?.dates)
+        ? listData.dates
+        : [];
+      addLog(`พบโฟลเดอร์วันที่ในคลังทั้งหมด ${dates.length} วัน`);
+
+      const accumulated: Article[] = [];
+      let scanned = 0;
+      let failedCount = 0;
+      let changed = 0;
+      let errorDays = 0;
+
+      for (let i = 0; i < dates.length; i++) {
+        if (isCancelledRef.current) {
+          throw new DOMException("Aborted by user", "AbortError");
+        }
+        const date = dates[i];
+        setStatusMessage(`กำลังตรวจสอบ (${i + 1}/${dates.length}): ${date}`);
+
+        const res = await fetch("/api/revalidate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Google-ID-Token": googleIdToken || "",
+          },
+          body: JSON.stringify({ date }),
+          signal: controller.signal,
+        });
+        if (res.status === 401 || res.status === 403) {
+          throw new Error(`Unauthorized:${res.status}`);
+        }
+        if (!res.ok) {
+          errorDays++;
+          addLog(
+            `⚠️ ${date}: ตรวจสอบไม่สำเร็จ (สถานะ ${res.status}) — ข้ามวันนี้`,
+          );
+          continue;
+        }
+        const day = await res.json();
+        accumulated.push(...(Array.isArray(day.failures) ? day.failures : []));
+        scanned += day.scanned ?? 0;
+        failedCount += day.failed ?? 0;
+        changed += day.changed ?? 0;
+        addLog(
+          `${date}: ตรวจ ${day.scanned} รายการ — FAILED ${day.failed}` +
+            `${day.changed ? `, ซ่อมดัชนี ${day.changed} รายการ` : ""}`,
+        );
+        setProgressPercent(Math.round(((i + 1) / dates.length) * 95));
+      }
+
+      if (errorDays === 0) {
+        setStatusMessage("กำลังสร้างดัชนีตรวจทานใหม่...");
+        const rebuildRes = await fetch("/api/revalidate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Google-ID-Token": googleIdToken || "",
+          },
+          body: JSON.stringify({ rebuild: true, failures: accumulated }),
+          signal: controller.signal,
+        });
+        if (rebuildRes.status === 401 || rebuildRes.status === 403) {
+          throw new Error(`Unauthorized:${rebuildRes.status}`);
+        }
+        if (rebuildRes.ok) {
+          addLog(
+            `🗂️ สร้าง needs-review.json ใหม่แล้ว — ${accumulated.length} รายการรอตรวจทาน`,
+          );
+          // The just-computed list IS the authoritative failure set — commit it
+          // to the "Needs review" tab now instead of waiting out the CDN window.
+          setAllFailures(accumulated);
+        } else {
+          addLog(
+            `⚠️ สร้าง needs-review.json ไม่สำเร็จ (สถานะ ${rebuildRes.status})`,
+          );
+        }
+      } else {
+        addLog(
+          `⚠️ ข้ามการสร้าง needs-review.json ใหม่ เพราะมี ${errorDays} วันที่ตรวจไม่สำเร็จ — กรุณารันซ้ำอีกครั้ง`,
+        );
+      }
+
+      setProgressPercent(100);
+      setStatusMessage("ตรวจสอบคลังบทความเสร็จสิ้น!");
+      addLog(
+        `🎉 เสร็จสิ้น: ตรวจ ${scanned} รายการ, FAILED ${failedCount}, ซ่อมดัชนี ${changed} รายการ`,
+      );
+
+      // Statuses may have flipped — refresh the visible archive window too.
+      fetchArchivedArticles(startDate, endDate || undefined);
+    } catch (error) {
+      const err = error as Error;
+      if (err.name === "AbortError" || isCancelledRef.current) {
+        addLog("🛑 กระบวนการถูกยกเลิกโดยผู้ใช้");
+        setStatusMessage("ยกเลิกการตรวจสอบเรียบร้อยแล้ว");
+      } else {
+        console.error(err);
+        const authMatch = err.message?.match(/Unauthorized:(\d+)/);
+        if (authMatch) {
+          const { log, status } = authErrorMessages(authMatch[1], userEmail);
+          addLog(log);
+          setStatusMessage(status);
+        } else {
+          setStatusMessage("เกิดข้อผิดพลาดในการตรวจสอบคลัง");
+          addLog(`❌ ข้อผิดพลาด: ${err.message || String(err)}`);
+        }
+      }
+    } finally {
+      setIsRevalidating(false);
+      setIsCancelling(false);
+      abortControllerRef.current = null;
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#060913] text-[#f8fafc] font-sans selection:bg-teal-500 selection:text-slate-950 relative overflow-x-hidden">
       <div className="absolute top-[-10%] left-[20%] w-125 h-125 bg-teal-500/3 rounded-full blur-[120px] pointer-events-none" />
@@ -759,6 +907,8 @@ export default function Dashboard() {
                 setImportUrl={setImportUrl}
                 isImporting={isImporting}
                 handleImportUrl={handleImportUrl}
+                isRevalidating={isRevalidating}
+                handleRevalidate={handleRevalidate}
               />
             </>
           )}

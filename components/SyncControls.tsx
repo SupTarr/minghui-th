@@ -19,6 +19,8 @@ interface SyncControlsProps {
   setImportUrl: (url: string) => void;
   isImporting: boolean;
   handleImportUrl: () => void;
+  isRevalidating: boolean;
+  handleRevalidate: () => void;
 }
 
 export default function SyncControls({
@@ -37,7 +39,10 @@ export default function SyncControls({
   setImportUrl,
   isImporting,
   handleImportUrl,
+  isRevalidating,
+  handleRevalidate,
 }: SyncControlsProps) {
+  const isBusy = isSyncing || isImporting || isRevalidating;
   return (
     <section className="lg:col-span-3 space-y-6">
       <div>
@@ -81,7 +86,7 @@ export default function SyncControls({
               setStartDate={setStartDate}
               endDate={endDate}
               setEndDate={setEndDate}
-              disabled={isSyncing || isImporting}
+              disabled={isBusy}
               align="right"
               size="md"
             />
@@ -123,7 +128,7 @@ export default function SyncControls({
                     handleImportUrl();
                   }
                 }}
-                disabled={isImporting || isSyncing}
+                disabled={isBusy}
                 placeholder="https://en.minghui.org/html/articles/..."
                 className="w-full bg-[#060913] border border-slate-900 rounded-xl px-4 py-2.5 text-xs text-slate-300 placeholder:text-slate-600 hover:border-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-mono"
               />
@@ -131,7 +136,7 @@ export default function SyncControls({
                 <button
                   type="button"
                   onClick={handleImportUrl}
-                  disabled={isImporting || isSyncing || !importUrl.trim()}
+                  disabled={isBusy || !importUrl.trim()}
                   className="flex-1 py-2.5 px-4 rounded-xl font-bold text-xs shadow-lg transition-all duration-300 flex items-center justify-center gap-2 bg-indigo-500 text-white hover:bg-indigo-400 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-indigo-500/15 font-sans disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                 >
                   {isImporting ? (
@@ -241,7 +246,7 @@ export default function SyncControls({
             ) : (
               <button
                 onClick={handleSync}
-                disabled={isImporting}
+                disabled={isImporting || isRevalidating}
                 className="w-full py-3 px-4 rounded-xl font-bold text-xs shadow-lg transition-all duration-300 flex items-center justify-center gap-2 bg-teal-500 text-slate-950 hover:bg-teal-400 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-teal-500/15 font-sans disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
               >
                 <svg
@@ -260,6 +265,86 @@ export default function SyncControls({
                 ซิงค์ข้อมูลระบบ
               </button>
             )}
+
+            {/* Divider between the sync and archive-maintenance actions */}
+            <div className="border-t border-slate-900/80" />
+
+            {/* Re-validate the whole archive from the web (no CLI needed):
+                re-runs the validator over every stored article and rebuilds the
+                needs-review index. Day-by-day and cancellable via the same
+                cancel wiring as the sync/import. */}
+            <div className="space-y-1.5">
+              <label className="block text-4xs font-bold text-slate-500 uppercase tracking-widest font-mono">
+                บำรุงรักษาคลังบทความ
+              </label>
+              {isRevalidating ? (
+                <div className="flex gap-2 w-full">
+                  <button
+                    disabled
+                    className="flex-1 py-2.5 px-4 rounded-xl font-bold text-xs bg-slate-900 text-slate-500 border border-slate-900 flex items-center justify-center gap-2 cursor-not-allowed font-sans"
+                  >
+                    <svg
+                      className="animate-spin h-4 w-4 text-slate-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    กำลังตรวจสอบคลัง...
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    disabled={isCancelling}
+                    className={`px-4 py-2.5 rounded-xl font-bold text-xs border transition-all duration-300 active:scale-95 cursor-pointer font-sans ${
+                      isCancelling
+                        ? "bg-rose-500/10 border-rose-500/20 text-rose-500/40 cursor-not-allowed"
+                        : "bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/20 text-rose-400 hover:text-rose-200"
+                    }`}
+                  >
+                    {isCancelling ? "รอยกเลิก..." : "ยกเลิก"}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleRevalidate}
+                  disabled={isSyncing || isImporting}
+                  className="w-full py-2.5 px-4 rounded-xl font-bold text-xs border transition-all duration-300 flex items-center justify-center gap-2 bg-amber-500/10 border-amber-500/20 text-amber-300 hover:bg-amber-500/20 hover:text-amber-200 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer font-sans disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  ตรวจซ้ำและซ่อมสถานะทั้งคลัง
+                </button>
+              )}
+              <p className="text-4xs text-slate-600 leading-relaxed font-sans">
+                ตรวจทุกบทความด้วยตัวตรวจเวอร์ชันล่าสุด ซ่อมสถานะในดัชนีรายวัน
+                และสร้างรายการ &ldquo;รอตรวจทาน&rdquo; ใหม่ทั้งหมด
+              </p>
+            </div>
           </div>
         </div>
       </div>

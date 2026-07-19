@@ -448,6 +448,113 @@ export async function readFileAtPath(filePath: string): Promise<unknown> {
   return data;
 }
 
+// Date-named archive folders under the root (one per synced day).
+const DATE_FOLDER_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Lists every date-named (YYYY-MM-DD) folder directly under the archive root,
+ * deduped and sorted ascending. Unlike the exact-name lookups above this result
+ * grows with the archive, so it paginates.
+ */
+export async function listDateFolders(): Promise<string[]> {
+  const drive = initDrive();
+  const rootFolderId = await getRootFolderId(drive);
+  const query = `mimeType = 'application/vnd.google-apps.folder' and '${rootFolderId}' in parents and trashed = false`;
+
+  const names = new Set<string>();
+  let pageToken: string | undefined;
+  do {
+    const params = getListParams(query, "nextPageToken, files(name)");
+    params.pageSize = 1000;
+    if (pageToken) params.pageToken = pageToken;
+    const res = await drive.files.list(params);
+    for (const f of res.data.files || []) {
+      if (f.name && DATE_FOLDER_RE.test(f.name)) names.add(f.name);
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  return Array.from(names).sort();
+}
+
+/**
+ * Lists the files directly inside `/{date}/` as name → file ID, or null when
+ * the date folder doesn't exist. Duplicate names keep the FIRST (oldest —
+ * list order is createdTime) match, the same canonical-node convention every
+ * other reader/writer here follows.
+ */
+export async function listDayFiles(
+  date: string,
+): Promise<Map<string, string> | null> {
+  const drive = initDrive();
+  const rootFolderId = await getRootFolderId(drive);
+
+  const folderQuery = `mimeType = 'application/vnd.google-apps.folder' and name = '${escapeDriveQueryValue(date)}' and '${rootFolderId}' in parents and trashed = false`;
+  const folderRes = await drive.files.list(
+    getListParams(folderQuery, "files(id)"),
+  );
+  const folderId = folderRes.data.files?.[0]?.id;
+  if (!folderId) return null;
+
+  const byName = new Map<string, string>();
+  let pageToken: string | undefined;
+  do {
+    const params = getListParams(
+      `'${folderId}' in parents and trashed = false`,
+      "nextPageToken, files(id, name)",
+    );
+    params.pageSize = 1000;
+    if (pageToken) params.pageToken = pageToken;
+    const res = await drive.files.list(params);
+    for (const f of res.data.files || []) {
+      if (f.name && f.id && !byName.has(f.name)) byName.set(f.name, f.id);
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  return byName;
+}
+
+/**
+ * Downloads and parses a JSON file by its Drive file ID. Throws on a non-JSON
+ * body (our stored files are always JSON, so that means corruption).
+ */
+export async function readJsonById(fileId: string): Promise<unknown> {
+  const drive = initDrive();
+  const res = await drive.files.get(
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "text" },
+  );
+  const data = res.data;
+  if (typeof data === "string") {
+    try {
+      return JSON.parse(data);
+    } catch {
+      throw new Error(`File ${fileId} exists but is not valid JSON`);
+    }
+  }
+  return data;
+}
+
+/**
+ * Overwrites a JSON file by its Drive file ID. files.update is PATCH, which
+ * gaxios never retries, so it goes through the shared write retry.
+ */
+export async function writeJsonById(
+  fileId: string,
+  content: unknown,
+): Promise<void> {
+  const drive = initDrive();
+  await withDriveWriteRetry(`writeJsonById(${fileId})`, () =>
+    drive.files.update({
+      fileId,
+      supportsAllDrives: true,
+      media: { mimeType: "application/json", body: JSON.stringify(content) },
+      fields: "id",
+    }),
+  );
+}
+
 /**
  * Fields shared by every article shape across the pipeline — the scraped listing
  * item, the catalog entry, and the full stored record. Declared once here so the
