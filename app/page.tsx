@@ -98,13 +98,13 @@ export default function Dashboard() {
 
   // The "Needs review" tab shows EVERY outstanding failure across the whole
   // archive, read in O(1) from the maintained failures index (/api/needs-review)
-  // instead of the date-windowed archive list. Re-fetched on each tab open (the
-  // response is cached, so it's cheap) so it also picks up failures from other
-  // sources like the cron.
+  // instead of the date-windowed archive list. Fetched on mount so the tab badge
+  // is correct from the first paint (not 0 until the tab is opened), and
+  // re-fetched on each tab switch (the response is cached, so it's cheap) so it
+  // also picks up failures from other sources like the cron.
   const [allFailures, setAllFailures] = useState<Article[]>([]);
 
   useEffect(() => {
-    if (activeTab !== "needs-review") return;
     let cancelled = false;
     fetch("/api/needs-review")
       .then((res) =>
