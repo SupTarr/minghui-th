@@ -32,6 +32,12 @@ interface ArchiveListProps {
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   openArticle: (path: string) => void;
   isAuthed: boolean;
+  // One-click repair on a Needs-review card: re-translate + re-save in place.
+  onRetranslate: (article: Article) => void;
+  // URL currently re-translating (that card shows the spinner)...
+  retranslatingUrl: string | null;
+  // ...while any in-flight operation (sync/import/re-validate) disables all.
+  retranslateDisabled: boolean;
 }
 
 export default function ArchiveList({
@@ -55,6 +61,9 @@ export default function ArchiveList({
   scrollContainerRef,
   openArticle,
   isAuthed,
+  onRetranslate,
+  retranslatingUrl,
+  retranslateDisabled,
 }: ArchiveListProps) {
   function goToPage(page: number) {
     setCurrentPage(page);
@@ -201,63 +210,124 @@ export default function ArchiveList({
             {listArticles
               .slice((currentPage - 1) * pageSize, currentPage * pageSize)
               .map((article: Article, idx: number) => (
-                <button
-                  type="button"
+                // Wrapper div so the re-translate action can sit next to the
+                // card — the card itself is a <button>, and a button may not
+                // nest inside another button.
+                <div
                   key={article.filePath ?? article.url ?? idx}
-                  disabled={!article.filePath}
-                  onClick={() =>
-                    article.filePath && openArticle(article.filePath)
-                  }
-                  className="w-full text-left p-4 rounded-xl bg-[#0c1220]/30 border border-slate-900 hover:border-teal-500/30 hover:bg-[#0c1220]/60 transition-all duration-300 group cursor-pointer shadow-xs active:scale-[0.99] animate-fade-in disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50"
+                  className="animate-fade-in"
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-3xs font-mono bg-slate-900/80 px-2 py-0.5 rounded text-slate-400 border border-slate-800 shrink-0">
-                        {article.date}
-                      </span>
-                      {article.category && (
-                        <span className="text-3xs font-sans px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400/90 border border-indigo-500/15 truncate">
-                          {article.category}
+                  <button
+                    type="button"
+                    disabled={!article.filePath}
+                    onClick={() =>
+                      article.filePath && openArticle(article.filePath)
+                    }
+                    className="w-full text-left p-4 rounded-xl bg-[#0c1220]/30 border border-slate-900 hover:border-teal-500/30 hover:bg-[#0c1220]/60 transition-all duration-300 group cursor-pointer shadow-xs active:scale-[0.99] disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-3xs font-mono bg-slate-900/80 px-2 py-0.5 rounded text-slate-400 border border-slate-800 shrink-0">
+                          {article.date}
                         </span>
-                      )}
-                      {article.subcategory && (
-                        <span className="text-3xs font-sans px-2 py-0.5 rounded bg-teal-500/10 text-teal-400/90 border border-teal-500/15 truncate">
-                          {article.subcategory}
-                        </span>
-                      )}
-                      {article.status === "FAILED" && (
-                        <span className="text-3xs font-mono px-2 py-0.5 rounded bg-red-500/10 text-red-300 border border-red-500/20 shrink-0">
-                          ต้องตรวจ
-                        </span>
-                      )}
+                        {article.category && (
+                          <span className="text-3xs font-sans px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400/90 border border-indigo-500/15 truncate">
+                            {article.category}
+                          </span>
+                        )}
+                        {article.subcategory && (
+                          <span className="text-3xs font-sans px-2 py-0.5 rounded bg-teal-500/10 text-teal-400/90 border border-teal-500/15 truncate">
+                            {article.subcategory}
+                          </span>
+                        )}
+                        {article.status === "FAILED" && (
+                          <span className="text-3xs font-mono px-2 py-0.5 rounded bg-red-500/10 text-red-300 border border-red-500/20 shrink-0">
+                            ต้องตรวจ
+                          </span>
+                        )}
+                      </div>
+                      <svg
+                        aria-hidden="true"
+                        className="w-3.5 h-3.5 text-slate-600 group-hover:text-teal-400 transition-colors"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+                        />
+                      </svg>
                     </div>
-                    <svg
-                      aria-hidden="true"
-                      className="w-3.5 h-3.5 text-slate-600 group-hover:text-teal-400 transition-colors"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-                      />
-                    </svg>
-                  </div>
-                  <h3 className="text-sm font-display font-bold text-slate-100 leading-relaxed group-hover:text-teal-400 transition-colors line-clamp-2">
-                    {article.title_th}
-                  </h3>
-                  <p className="text-3xs text-slate-500 font-sans line-clamp-1 mt-1.5 italic group-hover:text-slate-400 transition-colors">
-                    {article.title_en}
-                  </p>
-                  {article.status === "FAILED" && failureText(article) && (
-                    <p className="text-3xs text-red-300/80 font-sans line-clamp-2 mt-2 leading-relaxed">
-                      ⚠ {failureText(article)}
+                    <h3 className="text-sm font-display font-bold text-slate-100 leading-relaxed group-hover:text-teal-400 transition-colors line-clamp-2">
+                      {article.title_th}
+                    </h3>
+                    <p className="text-3xs text-slate-500 font-sans line-clamp-1 mt-1.5 italic group-hover:text-slate-400 transition-colors">
+                      {article.title_en}
                     </p>
-                  )}
-                </button>
+                    {article.status === "FAILED" && failureText(article) && (
+                      <p className="text-3xs text-red-300/80 font-sans line-clamp-2 mt-2 leading-relaxed">
+                        ⚠ {failureText(article)}
+                      </p>
+                    )}
+                  </button>
+                  {/* One-click repair, only where the admin works the failure
+                    list. On a PASS the card drops out of this tab on its own. */}
+                  {isAuthed &&
+                    activeTab === "needs-review" &&
+                    article.status === "FAILED" && (
+                      <button
+                        type="button"
+                        onClick={() => onRetranslate(article)}
+                        disabled={retranslateDisabled}
+                        className="w-full mt-1.5 py-2 px-3 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 hover:text-amber-200 transition-all duration-300 text-3xs font-bold font-sans flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {retranslatingUrl === article.url ? (
+                          <>
+                            <svg
+                              className="animate-spin h-3.5 w-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                            >
+                              <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                              />
+                              <path
+                                className="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                              />
+                            </svg>
+                            กำลังแปลใหม่และบันทึกทับ...
+                          </>
+                        ) : (
+                          <>
+                            <svg
+                              className="w-3.5 h-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.2"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+                              />
+                            </svg>
+                            แปลใหม่และบันทึกทับ
+                          </>
+                        )}
+                      </button>
+                    )}
+                </div>
               ))}
             {totalPages > 1 && (
               <div className="pt-2 flex items-center justify-between gap-2">

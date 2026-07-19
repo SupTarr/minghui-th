@@ -72,6 +72,9 @@ export default function Dashboard() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [importUrl, setImportUrl] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+  // URL of the article a Needs-review card is currently re-translating (that
+  // card shows the spinner; isImporting gates everything else meanwhile).
+  const [retranslatingUrl, setRetranslatingUrl] = useState<string | null>(null);
   const [isRevalidating, setIsRevalidating] = useState(false);
   const [newCount, setNewCount] = useState<number | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
@@ -500,12 +503,16 @@ export default function Dashboard() {
 
   // Import a single article by its URL — one handleSync iteration without the
   // scrape: translate → save → index, then surface it like a synced article.
-  async function handleImportUrl() {
-    if (isImporting || isSyncing || isRevalidating) return;
-
-    const url = importUrl.trim();
-    if (!url) return;
-
+  // Shared by the URL-import box (handleImportUrl) and the per-card
+  // "re-translate" action on the Needs-review tab (handleRetranslate).
+  // `dateOverride` pins the save to a known day folder: a re-translated
+  // article must land on its ORIGINAL day index entry — the stored date can
+  // differ from the URL-derived one, and a drifted date would fork the article
+  // into a second day. Returns true on success (so the box can clear itself).
+  async function importArticleByUrl(
+    url: string,
+    dateOverride?: string,
+  ): Promise<boolean> {
     // The link must be an article URL ending in /<id>.html — that's the shape
     // /api/save needs to derive the article ID and the date parser expects.
     // Reject a section page or a fat-fingered paste before hitting the network.
@@ -513,11 +520,10 @@ export default function Dashboard() {
       addLog(
         "❌ ลิงก์ไม่ถูกต้อง — กรุณาวางลิงก์บทความของ Minghui ที่ลงท้ายด้วยรหัสบทความ เช่น .../234818.html",
       );
-      return;
+      return false;
     }
 
     setIsImporting(true);
-    setActiveTab("newly-synced");
     isCancelledRef.current = false;
     setIsCancelling(false);
 
@@ -530,9 +536,11 @@ export default function Dashboard() {
       addLog(`กำลังนำเข้าบทความจากลิงก์: ${url}`);
       setStatusMessage("กำลังนำเข้าบทความจากลิงก์...");
 
-      // Minghui article URLs carry the date in the path; fall back to today only
-      // as a safety net (the URL was already shape-checked to end in /<id>.html).
-      const date = parseArticleDateFromUrl(url) ?? toYMD(new Date());
+      // A known article keeps its stored date; otherwise Minghui URLs carry the
+      // date in the path, with today only as a safety net (the URL was already
+      // shape-checked to end in /<id>.html).
+      const date =
+        dateOverride ?? parseArticleDateFromUrl(url) ?? toYMD(new Date());
 
       const transRes = await fetch("/api/translate", {
         method: "POST",
@@ -637,7 +645,7 @@ export default function Dashboard() {
 
       setStatusMessage("นำเข้าบทความเสร็จสมบูรณ์!");
       addLog("🎉 นำเข้าบทความจากลิงก์เสร็จสมบูรณ์แล้ว!");
-      setImportUrl("");
+      return true;
     } catch (error) {
       const err = error as Error;
       if (err.name === "AbortError" || isCancelledRef.current) {
@@ -655,10 +663,37 @@ export default function Dashboard() {
           addLog(`❌ ข้อผิดพลาด: ${err.message || String(err)}`);
         }
       }
+      return false;
     } finally {
       setIsImporting(false);
       setIsCancelling(false);
       abortControllerRef.current = null;
+    }
+  }
+
+  // The URL-box entry point: jump to the session tab so the result is visible,
+  // and clear the box only on success.
+  async function handleImportUrl() {
+    if (isImporting || isSyncing || isRevalidating) return;
+    const url = importUrl.trim();
+    if (!url) return;
+    setActiveTab("newly-synced");
+    if (await importArticleByUrl(url)) setImportUrl("");
+  }
+
+  // One-click repair from a Needs-review card: re-translate + re-save the
+  // article in place (same file, same day index entry — dateOverride). Stays on
+  // the current tab so the admin can keep working down the failure list; on a
+  // PASS the card drops out by itself (the session copy overrides the fetched
+  // failures union, and /api/index clears needs-review.json server-side).
+  async function handleRetranslate(article: Article) {
+    if (isImporting || isSyncing || isRevalidating) return;
+    setRetranslatingUrl(article.url);
+    try {
+      addLog(`เริ่มแปลใหม่: ${article.title_en}`);
+      await importArticleByUrl(article.url, article.date);
+    } finally {
+      setRetranslatingUrl(null);
     }
   }
 
@@ -874,6 +909,9 @@ export default function Dashboard() {
             scrollContainerRef={scrollContainerRef}
             openArticle={openArticle}
             isAuthed={Boolean(googleIdToken)}
+            onRetranslate={handleRetranslate}
+            retranslatingUrl={retranslatingUrl}
+            retranslateDisabled={isSyncing || isImporting || isRevalidating}
           />
 
           {/* The sync console + control panel are operator tooling — they mount
