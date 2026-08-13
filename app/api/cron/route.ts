@@ -8,6 +8,29 @@ import type { ScrapedArticle, Article } from "@/lib/gdrive";
 
 export const dynamic = "force-dynamic";
 
+// SCHEDULE (see vercel.json): two daily runs, 17:00 and 23:00 UTC.
+//
+// en.minghui.org is a statically generated site, so its articles only become
+// visible at a whole-site rebuild — the listing page we scrape and the article
+// files it links share a rebuild's Last-Modified to the second. Sampling those
+// timestamps across 67 days (Jun–Aug 2026) puts the daily rebuild at a median
+// of ~13:30 UTC, with the day's batch complete by 16:00 UTC on 94% of days and
+// by 17:00 UTC on 97%. (Those are upper bounds: a later rebuild re-stamps the
+// files an earlier one wrote, so the true times skew earlier.)
+//
+// 17:00 UTC is the primary run — a few hours after a typical rebuild, and
+// 00:00 Bangkok, so the day's articles land overnight rather than the next
+// morning. 23:00 UTC backstops the ~3% of days whose batch lands late (seen as
+// late as 22:00 UTC) plus same-day second rebuilds (~22:40 UTC). Hobby caps a
+// cron at once per day, so covering both windows needs two entries rather than
+// one more frequent schedule; Hobby also only honours the hour (±59 min), which
+// is why these are set on whole hours with margin instead of tuned to a minute.
+//
+// The backstop is nearly free: scrape-time dedup makes it a no-op scrape when
+// the 17:00 run already caught everything, and anything it does miss stays
+// recoverable because the listing holds ~40 entries (~2 weeks of cultivation
+// output) — a one-run slip never scrolls an article off the page.
+
 // Hobby + fluid compute caps a single invocation at 300s. Translation is
 // network-bound (one Gemini call per article, ~30-40s), so we fan a chunk of
 // articles out concurrently to fit a full daily batch inside that window
