@@ -6,6 +6,7 @@ import {
   isHttpUrl,
   cleanTitleText,
   cleanTranslationText,
+  restoreImageUrls,
 } from "./apiValidation";
 
 describe("isAllowedArticleUrl (SSRF guard)", () => {
@@ -161,3 +162,19 @@ describe("cleanTitleText (Gemini title reply)", () => {
     expect(() => cleanTitleText('""')).toThrow(/empty title/);
   });
 });
+
+describe("restoreImageUrls", () => {
+  it("restores exact EN image URLs into TH markdown when image counts match", () => {
+    const en = "![Cap 1](https://example.com/abc.jpg)\n![](https://example.com/123.jpg)";
+    const th = "![คำอธิบาย 1](https://example.com/abx.jpg)\n![](https://example.com/12e.jpg)";
+    const restored = restoreImageUrls(en, th);
+    expect(restored).toBe("![คำอธิบาย 1](https://example.com/abc.jpg)\n![](https://example.com/123.jpg)");
+  });
+
+  it("leaves TH markdown unchanged if image counts differ", () => {
+    const en = "![Cap 1](https://example.com/abc.jpg)";
+    const th = "![Cap 1](https://example.com/abc.jpg)\n![](https://example.com/def.jpg)";
+    expect(restoreImageUrls(en, th)).toBe(th);
+  });
+});
+

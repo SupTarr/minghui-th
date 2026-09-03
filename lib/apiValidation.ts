@@ -110,3 +110,27 @@ export function cleanTitleText(raw: string): string {
   }
   return text;
 }
+
+/**
+ * Restores image URLs in `content_th` from `content_en` if the number of image tags match 1:1.
+ * LLMs (such as Gemini) can occasionally alter hex hashes or characters in long image URLs
+ * during translation. When the count of markdown image tags matches between EN and TH,
+ * this function preserves Gemini's translated image captions `![caption]` while keeping
+ * the exact image URLs from `content_en`.
+ */
+export function restoreImageUrls(content_en: string, content_th: string): string {
+  if (!content_en || !content_th) return content_th;
+  const imgRegex = /!\[(.*?)\]\((.*?)\)/g;
+  const enUrls = [...content_en.matchAll(imgRegex)].map((m) => m[2]);
+  const thMatches = [...content_th.matchAll(imgRegex)];
+
+  if (enUrls.length > 0 && enUrls.length === thMatches.length) {
+    let index = 0;
+    return content_th.replace(imgRegex, (match, caption) => {
+      const url = enUrls[index++];
+      return `![${caption}](${url})`;
+    });
+  }
+  return content_th;
+}
+

@@ -13,6 +13,7 @@ import {
   isMinghuiSiteUrl,
   cleanTitleText,
   cleanTranslationText,
+  restoreImageUrls,
 } from "@/lib/apiValidation";
 
 export async function POST(req: Request) {
@@ -188,6 +189,7 @@ Article content: ${content_en}`;
       let content_th: string;
       try {
         content_th = await translate(bodyPrompt);
+        content_th = restoreImageUrls(content_en, content_th);
       } catch (e) {
         // Empty or transient reply — log and retry; rarely repeats.
         lastError = e;
